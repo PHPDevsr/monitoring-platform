@@ -26,7 +26,7 @@
 - Loki v3.7.4 for log aggregation
 - Promtail v3.6.11 for log collection
 - Node Exporter v1.12.1 for host metrics
-- cAdvisor v0.60.5 for container metrics
+- cAdvisor v0.49.1 for container metrics
 - Blackbox Exporter v0.28.0 for endpoint probing
 - Alert rules for host, container, and service monitoring
 - Deployment script with health checks

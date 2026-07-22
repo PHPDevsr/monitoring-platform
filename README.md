@@ -12,7 +12,7 @@ Production-grade centralized monitoring platform using Docker Compose.
 | Loki | v3.7.4 | Log aggregation |
 | Promtail | v3.6.11 | Log collector |
 | Node Exporter | v1.12.1 | Host system metrics |
-| cAdvisor | v0.60.5 | Container metrics |
+| cAdvisor | v0.49.1 | Container metrics |
 | Blackbox Exporter | v0.28.0 | Endpoint probing |
 
 ## Quick Start

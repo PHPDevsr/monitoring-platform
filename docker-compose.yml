@@ -262,7 +262,7 @@ services:
   # cAdvisor - Container Metrics
   # ===========================================================================
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.60.5
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: cadvisor
     restart: unless-stopped
     privileged: true
