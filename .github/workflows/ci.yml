@@ -77,7 +77,11 @@ jobs:
           sudo mv "prometheus-${PROM_VERSION}.linux-amd64/promtool" /usr/local/bin/
 
       - name: Validate Prometheus config
-        run: promtool check config prometheus/prometheus.yml
+        run: |
+          # Create directory structure matching container paths
+          sudo mkdir -p /etc/prometheus
+          sudo cp prometheus/alert.rules.yml /etc/prometheus/
+          promtool check config prometheus/prometheus.yml
 
       - name: Validate alert rules
         run: promtool check rules prometheus/alert.rules.yml
