@@ -4,20 +4,18 @@
 # Extends official image with envsubst for environment variable substitution
 # =============================================================================
 
+# Stage 1: Get envsubst from Alpine
+FROM alpine:3.20 AS builder
+RUN apk add --no-cache gettext
+
+# Stage 2: Alertmanager with envsubst
 FROM prom/alertmanager:v0.33.1
 
-# Switch to root to install packages
-USER root
-
-# Install envsubst (part of gettext)
-RUN apk add --no-cache gettext
+# Copy envsubst binary from builder
+COPY --from=builder /usr/bin/envsubst /usr/bin/envsubst
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-# Switch back to nobody user
-USER nobody
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager"]
