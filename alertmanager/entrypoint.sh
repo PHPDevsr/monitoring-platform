@@ -19,17 +19,17 @@ process_template() {
         remaining="$line"
         while [ -n "$remaining" ]; do
             case "$remaining" in
-                *\$\{*\})
+                *'${'*)
                     # Get text before ${var}
                     prefix="${remaining%%\$\{}*}"
                     result="${result}${prefix}"
-                    remaining="${remaining#*$\{}"
+                    remaining="${remaining#*\$\{}"
 
                     # Extract variable name
                     var="${remaining%%\}*}"
                     remaining="${remaining#*$var\}}"
 
-                    # Get value from environment variable
+                    # Get value from environment variable (use default empty string if unset)
                     eval "value=\"\${$var:-}\""
                     result="${result}${value}"
                     ;;
