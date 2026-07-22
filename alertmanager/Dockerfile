@@ -15,7 +15,7 @@ FROM prom/alertmanager:v0.33.1
 COPY --from=builder /usr/bin/envsubst /usr/bin/envsubst
 
 # Copy entrypoint script
-COPY entrypoint.sh /entrypoint.sh
+COPY --chmod=755 entrypoint.sh /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager"]
