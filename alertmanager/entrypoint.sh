@@ -15,31 +15,16 @@ CONFIG_FILE="/etc/alertmanager/alertmanager.yml"
 # Replaces ${VAR_NAME} patterns with their environment variable values
 process_template() {
     while IFS= read -r line || [ -n "$line" ]; do
-        result=""
-        remaining="$line"
-        while [ -n "$remaining" ]; do
-            case "$remaining" in
-                *'${'*)
-                    # Get text before ${var}
-                    prefix="${remaining%%\$\{}*}"
-                    result="${result}${prefix}"
-                    remaining="${remaining#*\$\{}"
-
-                    # Extract variable name
-                    var="${remaining%%\}*}"
-                    remaining="${remaining#*$var\}}"
-
-                    # Get value from environment variable (use default empty string if unset)
-                    eval "value=\"\${$var:-}\""
-                    result="${result}${value}"
-                    ;;
-                *)
-                    result="${result}${remaining}"
-                    remaining=""
-                    ;;
-            esac
+        # Process until no more ${VAR} patterns exist
+        while [ "$line" != "${line#*\$\{}" ]; do
+            prefix="${line%%\$\{}*}"
+            rest="${line#*\$\{}"
+            var="${rest%%\}*}"
+            suffix="${rest#*$var\}}"
+            eval "val=\"\${$var:-}\""
+            line="${prefix}${val}${suffix}"
         done
-        echo "$result"
+        echo "$line"
     done < "$1" > "$2"
 }
 
@@ -54,6 +39,11 @@ if [ -f "$CONFIG_TEMPLATE" ]; then
 else
     echo "[entrypoint] No template found, using existing config"
 fi
+
+# Debug: print generated config
+echo "[entrypoint] === Generated config ==="
+cat "$CONFIG_FILE"
+echo "[entrypoint] === End config ==="
 
 # Start Alertmanager
 echo "[entrypoint] Starting Alertmanager..."
