@@ -1,0 +1,44 @@
+# =============================================================================
+# Docker Build Ignore
+# =============================================================================
+# Files excluded from Docker build context
+# =============================================================================
+
+# Environment files with secrets - CRITICAL
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Scripts (not needed in images)
+scripts/
+
+# Backups and reports
+backups/
+reports/
+pre-restore-backup/
+
+# IDE and OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Other service configs (each service only needs its own)
+prometheus/
+grafana/
+loki/
+promtail/
+blackbox-exporter/

@@ -1,0 +1,32 @@
+# =============================================================================
+# Grafana Dashboard Provisioning
+# =============================================================================
+# Auto-loads dashboards from the dashboards directory
+# =============================================================================
+
+apiVersion: 1
+
+providers:
+  # ---------------------------------------------------------------------------
+  # Default dashboard provider
+  # ---------------------------------------------------------------------------
+  - name: 'default'
+    # Organization ID
+    orgId: 1
+    # Folder to store dashboards (empty = General folder)
+    folder: ''
+    # Folder UID
+    folderUid: ''
+    # Type of provider
+    type: file
+    # Disable deletion from UI
+    disableDeletion: false
+    # Allow updates from UI
+    updateIntervalSeconds: 30
+    # Allow editing from UI
+    allowUiUpdates: true
+    options:
+      # Path to dashboard JSON files
+      path: /etc/grafana/provisioning/dashboards
+      # Watch for changes
+      foldersFromFilesStructure: true

@@ -1,0 +1,289 @@
+# =============================================================================
+# Prometheus Alert Rules
+# =============================================================================
+# Production-grade alerting rules for infrastructure monitoring
+# =============================================================================
+
+groups:
+  # ===========================================================================
+  # Host/Node Alerts
+  # ===========================================================================
+  - name: node_alerts
+    interval: 30s
+    rules:
+      # High CPU Usage
+      - alert: HighCpuUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% on {{ $labels.instance }} for more than 5 minutes. Current value: {{ $value | printf \"%.2f\" }}%"
+
+      - alert: CriticalCpuUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical CPU usage detected"
+          description: "CPU usage is above 95% on {{ $labels.instance }}. Current value: {{ $value | printf \"%.2f\" }}%"
+
+      # Memory Usage
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 80% on {{ $labels.instance }}. Current value: {{ $value | printf \"%.2f\" }}%"
+
+      - alert: CriticalMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical memory usage detected"
+          description: "Memory usage is above 95% on {{ $labels.instance }}. Current value: {{ $value | printf \"%.2f\" }}%"
+
+      # Disk Usage
+      - alert: HighDiskUsage
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk usage detected"
+          description: "Disk usage is above 80% on {{ $labels.instance }} mount {{ $labels.mountpoint }}. Current value: {{ $value | printf \"%.2f\" }}%"
+
+      - alert: CriticalDiskUsage
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical disk usage detected"
+          description: "Disk usage is above 95% on {{ $labels.instance }} mount {{ $labels.mountpoint }}. Current value: {{ $value | printf \"%.2f\" }}%"
+
+      # Disk Will Fill In 24 Hours
+      - alert: DiskWillFillIn24Hours
+        expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}[6h], 24*3600) < 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk will fill in 24 hours"
+          description: "Filesystem on {{ $labels.instance }} mount {{ $labels.mountpoint }} is predicted to run out of space within 24 hours."
+
+      # Host Down
+      - alert: HostDown
+        expr: up{job="node-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Host is down"
+          description: "Node exporter is not reachable on {{ $labels.instance }}."
+
+      # High Load Average
+      - alert: HighLoadAverage
+        expr: node_load15 / count without(cpu, mode) (node_cpu_seconds_total{mode="idle"}) > 2
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High load average detected"
+          description: "15-minute load average is more than 2x the number of CPUs on {{ $labels.instance }}. Current value: {{ $value | printf \"%.2f\" }}"
+
+  # ===========================================================================
+  # Container Alerts
+  # ===========================================================================
+  - name: container_alerts
+    interval: 30s
+    rules:
+      # Container Down
+      - alert: ContainerDown
+        expr: absent(container_last_seen{name=~".+"})
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container is down"
+          description: "Container {{ $labels.name }} is not running."
+
+      # Container High CPU
+      - alert: ContainerHighCpu
+        expr: sum by(name) (rate(container_cpu_usage_seconds_total{name=~".+"}[5m])) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container high CPU usage"
+          description: "Container {{ $labels.name }} CPU usage is above 80%. Current value: {{ $value | printf \"%.2f\" }}%"
+
+      # Container High Memory
+      - alert: ContainerHighMemory
+        expr: (container_memory_usage_bytes{name=~".+"} / container_spec_memory_limit_bytes{name=~".+"} * 100) > 80 and container_spec_memory_limit_bytes{name=~".+"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container high memory usage"
+          description: "Container {{ $labels.name }} memory usage is above 80% of its limit. Current value: {{ $value | printf \"%.2f\" }}%"
+
+      # Container Restarting
+      - alert: ContainerRestarting
+        expr: increase(container_last_seen{name=~".+"}[1h]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container restarting frequently"
+          description: "Container {{ $labels.name }} has restarted more than 3 times in the last hour."
+
+  # ===========================================================================
+  # Prometheus Alerts
+  # ===========================================================================
+  - name: prometheus_alerts
+    interval: 30s
+    rules:
+      # Prometheus Target Down
+      - alert: PrometheusTargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus target is down"
+          description: "Prometheus target {{ $labels.job }}/{{ $labels.instance }} is down."
+
+      # Prometheus Configuration Reload Failed
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus configuration reload failed"
+          description: "Prometheus configuration reload has failed."
+
+      # Prometheus Too Many Restarts
+      - alert: PrometheusTooManyRestarts
+        expr: changes(process_start_time_seconds{job="prometheus"}[1h]) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus has restarted too many times"
+          description: "Prometheus has restarted more than 2 times in the last hour."
+
+      # TSDB Compaction Failed
+      - alert: PrometheusTsdbCompactionsFailed
+        expr: increase(prometheus_tsdb_compactions_failed_total[1h]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus TSDB compactions are failing"
+          description: "Prometheus has failed {{ $value }} compactions in the last hour."
+
+  # ===========================================================================
+  # Alertmanager Alerts
+  # ===========================================================================
+  - name: alertmanager_alerts
+    interval: 30s
+    rules:
+      # Alertmanager Down
+      - alert: AlertmanagerDown
+        expr: up{job="alertmanager"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alertmanager is down"
+          description: "Alertmanager is not reachable."
+
+      # Alertmanager Configuration Reload Failed
+      - alert: AlertmanagerConfigReloadFailed
+        expr: alertmanager_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alertmanager configuration reload failed"
+          description: "Alertmanager configuration reload has failed."
+
+  # ===========================================================================
+  # Blackbox Probe Alerts
+  # ===========================================================================
+  - name: blackbox_alerts
+    interval: 30s
+    rules:
+      # Probe Failed
+      - alert: ProbeFailed
+        expr: probe_success == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Probe failed"
+          description: "Probe to {{ $labels.instance }} has failed."
+
+      # Slow Probe
+      - alert: SlowProbe
+        expr: avg_over_time(probe_duration_seconds[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow probe detected"
+          description: "Probe to {{ $labels.instance }} is slow ({{ $value | printf \"%.2f\" }}s average)."
+
+      # SSL Certificate Expiring Soon
+      - alert: SslCertificateExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 30
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate for {{ $labels.instance }} expires in less than 30 days."
+
+      # SSL Certificate Expiring Very Soon
+      - alert: SslCertificateExpiringVerySoon
+        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 7
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "SSL certificate expiring very soon"
+          description: "SSL certificate for {{ $labels.instance }} expires in less than 7 days."
+
+  # ===========================================================================
+  # Loki Alerts
+  # ===========================================================================
+  - name: loki_alerts
+    interval: 30s
+    rules:
+      # Loki Down
+      - alert: LokiDown
+        expr: up{job="loki"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Loki is down"
+          description: "Loki log aggregator is not reachable."
+
+      # Loki Request Errors
+      - alert: LokiRequestErrors
+        expr: rate(loki_request_duration_seconds_count{status_code=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki is experiencing errors"
+          description: "Loki is returning 5xx errors at a rate of {{ $value | printf \"%.2f\" }}/s."

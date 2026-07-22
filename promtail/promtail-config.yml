@@ -1,0 +1,127 @@
+# =============================================================================
+# Promtail Configuration
+# =============================================================================
+# Log collector that ships logs to Loki
+# =============================================================================
+
+server:
+  # HTTP listen port for Promtail's own metrics and health endpoints
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+# Positions file - tracks where Promtail left off reading logs
+positions:
+  filename: /tmp/positions.yaml
+
+# Loki client configuration
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    # Batch settings
+    batchwait: 1s
+    batchsize: 1048576
+    # Retry settings
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 10
+    # Timeout settings
+    timeout: 10s
+
+# Scrape configurations - defines what logs to collect
+scrape_configs:
+  # ---------------------------------------------------------------------------
+  # Docker container logs via Docker socket
+  # ---------------------------------------------------------------------------
+  - job_name: containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Use container name as job label
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+      # Add container ID
+      - source_labels: ['__meta_docker_container_id']
+        target_label: 'container_id'
+      # Add image name
+      - source_labels: ['__meta_docker_container_image']
+        target_label: 'image'
+      # Add compose service name if available
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'compose_service'
+      # Add compose project name if available
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: 'compose_project'
+      # Set job name to container name
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'job'
+
+  # ---------------------------------------------------------------------------
+  # System logs - syslog
+  # ---------------------------------------------------------------------------
+  - job_name: syslog
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: syslog
+          host: monitoring-host
+          __path__: /var/log/syslog
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<hostname>\w+)\s+(?P<process>\w+)(\[(?P<pid>\d+)\])?:\s+(?P<message>.*)$'
+      - labels:
+          hostname:
+          process:
+      - timestamp:
+          source: timestamp
+          format: 'Jan _2 15:04:05'
+
+  # ---------------------------------------------------------------------------
+  # System logs - auth.log
+  # ---------------------------------------------------------------------------
+  - job_name: auth
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: auth
+          host: monitoring-host
+          __path__: /var/log/auth.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<hostname>\w+)\s+(?P<process>\w+)(\[(?P<pid>\d+)\])?:\s+(?P<message>.*)$'
+      - labels:
+          hostname:
+          process:
+
+  # ---------------------------------------------------------------------------
+  # System logs - kern.log
+  # ---------------------------------------------------------------------------
+  - job_name: kernel
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: kernel
+          host: monitoring-host
+          __path__: /var/log/kern.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<hostname>\w+)\s+kernel:\s+(?P<message>.*)$'
+      - labels:
+          hostname:
+
+  # ---------------------------------------------------------------------------
+  # Docker daemon logs
+  # ---------------------------------------------------------------------------
+  - job_name: docker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          host: monitoring-host
+          __path__: /var/log/docker.log

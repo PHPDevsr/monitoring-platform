@@ -1,0 +1,201 @@
+# =============================================================================
+# CI Pipeline - Monitoring Platform
+# =============================================================================
+# Validates configurations and tests Docker Compose stack
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  # ===========================================================================
+  # Validate YAML Syntax
+  # ===========================================================================
+  yaml-lint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Lint YAML files
+        run: |
+          yamllint -d relaxed \
+            docker-compose.yml \
+            prometheus/prometheus.yml \
+            prometheus/alert.rules.yml \
+            alertmanager/alertmanager.yml.tmpl \
+            loki/loki-config.yml \
+            promtail/promtail-config.yml \
+            blackbox-exporter/blackbox.yml \
+            grafana/provisioning/datasources/datasources.yml \
+            grafana/provisioning/dashboards/dashboards.yml
+
+  # ===========================================================================
+  # Validate Docker Compose
+  # ===========================================================================
+  compose-validate:
+    name: Docker Compose Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Create test .env file
+        run: cp .env.example .env
+
+      - name: Validate docker-compose.yml
+        run: docker compose config --quiet
+
+  # ===========================================================================
+  # Validate Prometheus Config
+  # ===========================================================================
+  prometheus-validate:
+    name: Prometheus Config Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download promtool
+        run: |
+          PROM_VERSION="2.53.0"
+          wget -q "https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
+          tar xzf "prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
+          sudo mv "prometheus-${PROM_VERSION}.linux-amd64/promtool" /usr/local/bin/
+
+      - name: Validate Prometheus config
+        run: promtool check config prometheus/prometheus.yml
+
+      - name: Validate alert rules
+        run: promtool check rules prometheus/alert.rules.yml
+
+  # ===========================================================================
+  # Build Custom Images
+  # ===========================================================================
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build Alertmanager image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./alertmanager
+          push: false
+          tags: monitoring-alertmanager:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # Integration Test - Stack Startup
+  # ===========================================================================
+  integration-test:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    needs: [yaml-lint, compose-validate, prometheus-validate, build-images]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Create test .env file
+        run: |
+          cp .env.example .env
+          # Set test values
+          sed -i 's/changeme/testpassword/g' .env
+          sed -i 's/your-app-password/testsmtp/g' .env
+
+      - name: Build and start stack
+        run: |
+          docker compose build
+          docker compose up -d
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services to start..."
+          sleep 60
+
+          # Check each service
+          services=("prometheus" "grafana" "alertmanager" "loki" "node-exporter" "cadvisor" "blackbox-exporter")
+
+          for service in "${services[@]}"; do
+            echo "Checking $service..."
+            status=$(docker inspect --format='{{.State.Status}}' "$service" 2>/dev/null || echo "not found")
+            if [ "$status" != "running" ]; then
+              echo "ERROR: $service is not running (status: $status)"
+              docker compose logs "$service"
+              exit 1
+            fi
+            echo "$service is running"
+          done
+
+      - name: Test Prometheus endpoint
+        run: |
+          response=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:9090/-/healthy || echo "000")
+          if [ "$response" != "200" ]; then
+            echo "Prometheus health check failed: HTTP $response"
+            exit 1
+          fi
+          echo "Prometheus is healthy"
+
+      - name: Test Grafana endpoint
+        run: |
+          response=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:3000/api/health || echo "000")
+          if [ "$response" != "200" ]; then
+            echo "Grafana health check failed: HTTP $response"
+            exit 1
+          fi
+          echo "Grafana is healthy"
+
+      - name: Test Alertmanager endpoint
+        run: |
+          response=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:9093/-/healthy || echo "000")
+          if [ "$response" != "200" ]; then
+            echo "Alertmanager health check failed: HTTP $response"
+            exit 1
+          fi
+          echo "Alertmanager is healthy"
+
+      - name: Test Prometheus targets
+        run: |
+          # Give more time for scrapes
+          sleep 30
+
+          # Check targets
+          targets=$(curl -sf http://localhost:9090/api/v1/targets)
+          up_count=$(echo "$targets" | grep -o '"health":"up"' | wc -l)
+
+          echo "Active targets: $up_count"
+
+          if [ "$up_count" -lt 3 ]; then
+            echo "WARNING: Expected at least 3 targets up, got $up_count"
+            echo "$targets" | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
+          fi
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "=== Docker Compose Logs ==="
+          docker compose logs --tail=100
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose down -v

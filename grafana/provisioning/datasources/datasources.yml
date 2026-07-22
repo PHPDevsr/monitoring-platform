@@ -1,0 +1,66 @@
+# =============================================================================
+# Grafana Datasources Provisioning
+# =============================================================================
+# Auto-configures Prometheus and Loki as data sources
+# =============================================================================
+
+apiVersion: 1
+
+# Delete datasources that are no longer in this file
+deleteDatasources: []
+
+datasources:
+  # ---------------------------------------------------------------------------
+  # Prometheus - Metrics
+  # ---------------------------------------------------------------------------
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    # Set as default datasource
+    isDefault: true
+    # Enable alerting from this datasource
+    editable: false
+    jsonData:
+      # HTTP method
+      httpMethod: POST
+      # Timeout
+      timeout: 60
+      # Query timeout
+      queryTimeout: 60s
+      # Enable exemplars
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: tempo
+    # Unique identifier for this datasource
+    uid: prometheus
+
+  # ---------------------------------------------------------------------------
+  # Loki - Logs
+  # ---------------------------------------------------------------------------
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      # Maximum lines to return
+      maxLines: 1000
+      # Timeout
+      timeout: 60
+      # Derived fields - link logs to other datasources
+      derivedFields: []
+    # Unique identifier for this datasource
+    uid: loki
+
+  # ---------------------------------------------------------------------------
+  # Alertmanager
+  # ---------------------------------------------------------------------------
+  - name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    editable: false
+    jsonData:
+      implementation: prometheus
+    uid: alertmanager
