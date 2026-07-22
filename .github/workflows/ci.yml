@@ -112,8 +112,9 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Validate rendered alertmanager config (no creds)
-        # Render the template the same way the container does, with no
-        # SMTP/Slack env vars set, then validate the resulting YAML.
+        # Render the template the same way the container does, then validate
+        # the resulting config with amtool check-config (official alertmanager
+        # config validator), not just YAML syntax.
         run: |
           mkdir -p /tmp/am/etc/alertmanager
           cp alertmanager/alertmanager.yml.tmpl /tmp/am/etc/alertmanager/alertmanager.yml.tmpl
@@ -124,12 +125,16 @@ jobs:
             -v /tmp/am/etc/alertmanager:/etc/alertmanager \
             monitoring-alertmanager:test
 
-          # Validate generated YAML syntax
-          python3 -c "import yaml,sys; yaml.safe_load(open('/tmp/am/etc/alertmanager/alertmanager.yml')); print('Rendered alertmanager.yml is valid YAML (no creds)')"
+          # Validate with amtool check-config inside the image
+          docker run --rm \
+            -v /tmp/am/etc/alertmanager:/etc/alertmanager:ro \
+            --entrypoint /bin/amtool \
+            monitoring-alertmanager:test \
+            check-config /etc/alertmanager/alertmanager.yml
 
       - name: Validate rendered alertmanager config (with creds)
         # Render with SMTP/Slack env vars set to ensure those branches also
-        # produce valid YAML.
+        # produce a valid alertmanager config.
         run: |
           rm -f /tmp/am/etc/alertmanager/alertmanager.yml
           docker run --rm \
@@ -146,7 +151,11 @@ jobs:
             -v /tmp/am/etc/alertmanager:/etc/alertmanager \
             monitoring-alertmanager:test
 
-          python3 -c "import yaml,sys; yaml.safe_load(open('/tmp/am/etc/alertmanager/alertmanager.yml')); print('Rendered alertmanager.yml is valid YAML (with creds)')"
+          docker run --rm \
+            -v /tmp/am/etc/alertmanager:/etc/alertmanager:ro \
+            --entrypoint /bin/amtool \
+            monitoring-alertmanager:test \
+            check-config /etc/alertmanager/alertmanager.yml
 
   # ===========================================================================
   # Integration Test - Stack Startup
