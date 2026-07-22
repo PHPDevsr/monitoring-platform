@@ -8,12 +8,12 @@ Production-grade centralized monitoring platform using Docker Compose.
 |-----------|---------|---------|
 | Prometheus | v2.53.0 | Metrics collection and storage |
 | Grafana | v11.1.0 | Visualization and dashboards |
-| Alertmanager | v0.27.0 | Alert routing and notification |
-| Loki | v3.1.0 | Log aggregation |
-| Promtail | v3.1.0 | Log collector |
-| Node Exporter | v1.8.1 | Host system metrics |
-| cAdvisor | v0.49.1 | Container metrics |
-| Blackbox Exporter | v0.25.0 | Endpoint probing |
+| Alertmanager | v0.33.1 | Alert routing and notification |
+| Loki | v3.7.4 | Log aggregation |
+| Promtail | v3.6.11 | Log collector |
+| Node Exporter | v1.12.1 | Host system metrics |
+| cAdvisor | v0.60.5 | Container metrics |
+| Blackbox Exporter | v0.28.0 | Endpoint probing |
 
 ## Quick Start
 

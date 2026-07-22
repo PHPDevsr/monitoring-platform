@@ -22,12 +22,12 @@
 - Docker Compose configuration with all monitoring services
 - Prometheus v2.53.0 with 30-day retention
 - Grafana v11.1.0 with auto-provisioned datasources
-- Alertmanager v0.27.0 with routing configuration
-- Loki v3.1.0 for log aggregation
-- Promtail v3.1.0 for log collection
-- Node Exporter v1.8.1 for host metrics
-- cAdvisor v0.49.1 for container metrics
-- Blackbox Exporter v0.25.0 for endpoint probing
+- Alertmanager v0.33.1 with routing configuration
+- Loki v3.7.4 for log aggregation
+- Promtail v3.6.11 for log collection
+- Node Exporter v1.12.1 for host metrics
+- cAdvisor v0.60.5 for container metrics
+- Blackbox Exporter v0.28.0 for endpoint probing
 - Alert rules for host, container, and service monitoring
 - Deployment script with health checks
 - Validation script for stack verification
