@@ -112,6 +112,11 @@ echo "[entrypoint] === Generated config ==="
 cat "$CONFIG_FILE"
 echo "[entrypoint] === End config ==="
 
-# Start Alertmanager
+# Start Alertmanager (unless only rendering was requested)
+if [ "${AM_RENDER_ONLY:-0}" = "1" ]; then
+    echo "[entrypoint] AM_RENDER_ONLY=1, exiting after render"
+    exit 0
+fi
+
 echo "[entrypoint] Starting Alertmanager..."
 exec /bin/alertmanager "$@"

@@ -31,12 +31,14 @@ jobs:
         run: pip install yamllint
 
       - name: Lint YAML files
+        # NOTE: alertmanager.yml.tmpl is a template with ${VAR} and {{MARKER}}
+        # placeholders, not static YAML. It is validated after rendering in
+        # the build-images job.
         run: |
           yamllint -d relaxed \
             docker-compose.yml \
             prometheus/prometheus.yml \
             prometheus/alert.rules.yml \
-            alertmanager/alertmanager.yml.tmpl \
             loki/loki-config.yml \
             promtail/promtail-config.yml \
             blackbox-exporter/blackbox.yml \
@@ -104,9 +106,47 @@ jobs:
         with:
           context: ./alertmanager
           push: false
+          load: true
           tags: monitoring-alertmanager:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Validate rendered alertmanager config (no creds)
+        # Render the template the same way the container does, with no
+        # SMTP/Slack env vars set, then validate the resulting YAML.
+        run: |
+          mkdir -p /tmp/am/etc/alertmanager
+          cp alertmanager/alertmanager.yml.tmpl /tmp/am/etc/alertmanager/alertmanager.yml.tmpl
+
+          # Render in a temporary container (AM_RENDER_ONLY=1 exits after render)
+          docker run --rm \
+            -e AM_RENDER_ONLY=1 \
+            -v /tmp/am/etc/alertmanager:/etc/alertmanager \
+            monitoring-alertmanager:test
+
+          # Validate generated YAML syntax
+          python3 -c "import yaml,sys; yaml.safe_load(open('/tmp/am/etc/alertmanager/alertmanager.yml')); print('Rendered alertmanager.yml is valid YAML (no creds)')"
+
+      - name: Validate rendered alertmanager config (with creds)
+        # Render with SMTP/Slack env vars set to ensure those branches also
+        # produce valid YAML.
+        run: |
+          rm -f /tmp/am/etc/alertmanager/alertmanager.yml
+          docker run --rm \
+            -e AM_RENDER_ONLY=1 \
+            -e SMTP_SMARTHOST=smtp.example.com:587 \
+            -e SMTP_FROM=alerts@example.com \
+            -e SMTP_AUTH_USERNAME=alerts@example.com \
+            -e SMTP_AUTH_PASSWORD=secret \
+            -e SMTP_REQUIRE_TLS=true \
+            -e ALERT_EMAIL_TO=oncall@example.com \
+            -e SLACK_API_URL=https://hooks.slack.com/services/x/y/z \
+            -e SLACK_CHANNEL_CRITICAL=#alerts-critical \
+            -e SLACK_CHANNEL_WARNING=#alerts-warning \
+            -v /tmp/am/etc/alertmanager:/etc/alertmanager \
+            monitoring-alertmanager:test
+
+          python3 -c "import yaml,sys; yaml.safe_load(open('/tmp/am/etc/alertmanager/alertmanager.yml')); print('Rendered alertmanager.yml is valid YAML (with creds)')"
 
   # ===========================================================================
   # Integration Test - Stack Startup
