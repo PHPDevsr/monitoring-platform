@@ -131,7 +131,7 @@ services:
     build:
       context: ./alertmanager
       dockerfile: Dockerfile
-    image: monitoring-alertmanager:v0.27.0
+    image: monitoring-alertmanager:v0.33.1
     container_name: alertmanager
     restart: unless-stopped
     env_file:
