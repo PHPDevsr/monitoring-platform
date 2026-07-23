@@ -9,15 +9,13 @@ Release notes for each version are generated automatically by
 [Conventional Commits](https://www.conventionalcommits.org/) when a version tag
 (`v*`) is pushed. Do not hand-edit per-version sections below.
 ## [Unreleased]
-### Changed
-
-- **changelog:** Update for v1.0.0 (70d79fe)
-## [1.0.0] - 2026-07-23
 ### Added
 
 - Add production-grade monitoring platform (f588197)
 ### Changed
 
+- **changelog:** Update for v1.0.0 (45c4d7c)
+- **changelog:** Update for v1.0.0 (70d79fe)
 - Bump pinned actions to latest versions (SHA-pinned) (948196c)
 - Pin all actions to full-length commit SHAs (28588b6)
 - Switch to git-cliff tag-triggered release (v1.0.0 baseline) (9169e24)
