@@ -33,76 +33,86 @@ substitute_vars() {
 }
 
 # --- Step 2: receiver marker expansion -------------------------------------
-# Builds the email_configs / slack_configs YAML snippets, or empty lines.
+# Replaces {{EMAIL_CONFIG_*}}, {{SLACK_CONFIG_*}}, {{SMTP_GLOBAL}} and
+# {{SLACK_GLOBAL}} markers with email/slack/global YAML blocks, but only when
+# the relevant credentials are present; otherwise the markers are removed so
+# the rendered config stays valid without SMTP/Slack.
+#
+# The blocks are multi-line, which sed cannot substitute (an embedded newline
+# terminates the s command). Instead a single awk program reads the scalar env
+# values via ENVIRON[] and builds each block as an awk string literal with
+# explicit "\n" separators, then gsub()s the marker on each input line. gsub
+# emits the embedded newlines as real line breaks in the output. The scalar
+# values are also escaped for gsub (which treats & and \ specially in the
+# replacement) so credentials containing those characters stay intact.
 expand_markers() {
-    # Email config blocks (only when SMTP host and recipient are set)
-    if [ -n "${SMTP_SMARTHOST:-}" ] && [ -n "${ALERT_EMAIL_TO:-}" ]; then
-        EMAIL_CONFIG_DEFAULT="email_configs:
-      - to: '${ALERT_EMAIL_TO}'
-        send_resolved: true
-        headers:
-          Subject: '[ALERT] {{ .GroupLabels.alertname }}'"
-        EMAIL_CONFIG_CRITICAL="email_configs:
-      - to: '${ALERT_EMAIL_TO}'
-        send_resolved: true
-        headers:
-          Subject: '[CRITICAL] {{ .GroupLabels.alertname }}'"
-        EMAIL_CONFIG_WARNING="email_configs:
-      - to: '${ALERT_EMAIL_TO}'
-        send_resolved: true
-        headers:
-          Subject: '[WARNING] {{ .GroupLabels.alertname }}'"
-        EMAIL_CONFIG_PROBE="email_configs:
-      - to: '${ALERT_EMAIL_TO}'
-        send_resolved: true
-        headers:
-          Subject: '[PROBE] {{ .GroupLabels.alertname }}'"
-        # Global SMTP block emitted only with email creds so the rendered
-        # config never contains empty smtp_* fields that amtool would reject.
-        SMTP_GLOBAL="  smtp_smarthost: '${SMTP_SMARTHOST}'
-  smtp_from: '${SMTP_FROM}'
-  smtp_auth_username: '${SMTP_AUTH_USERNAME}'
-  smtp_auth_password: '${SMTP_AUTH_PASSWORD}'
-  smtp_require_tls: ${SMTP_REQUIRE_TLS}"
-    else
-        EMAIL_CONFIG_DEFAULT=""
-        EMAIL_CONFIG_CRITICAL=""
-        EMAIL_CONFIG_WARNING=""
-        EMAIL_CONFIG_PROBE=""
-        SMTP_GLOBAL=""
-    fi
-
-    # Slack config blocks (only when webhook URL is set)
-    if [ -n "${SLACK_API_URL:-}" ]; then
-        SLACK_CONFIG_CRITICAL="slack_configs:
-      - channel: '${SLACK_CHANNEL_CRITICAL:-#alerts}'
-        send_resolved: true
-        title: '{{ .Status | toUpper }}: {{ .GroupLabels.alertname }}'
-        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'"
-        SLACK_CONFIG_WARNING="slack_configs:
-      - channel: '${SLACK_CHANNEL_WARNING:-#alerts}'
-        send_resolved: true
-        title: '{{ .Status | toUpper }}: {{ .GroupLabels.alertname }}'
-        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'"
-        # Global Slack API URL emitted only with a webhook URL set.
-        SLACK_GLOBAL="  slack_api_url: '${SLACK_API_URL}'"
-    else
-        SLACK_CONFIG_CRITICAL=""
-        SLACK_CONFIG_WARNING=""
-        SLACK_GLOBAL=""
-    fi
-
-    # Replace markers using sed
-    sed \
-        -e "s|{{EMAIL_CONFIG_DEFAULT}}|${EMAIL_CONFIG_DEFAULT}|" \
-        -e "s|{{EMAIL_CONFIG_CRITICAL}}|${EMAIL_CONFIG_CRITICAL}|" \
-        -e "s|{{EMAIL_CONFIG_WARNING}}|${EMAIL_CONFIG_WARNING}|" \
-        -e "s|{{EMAIL_CONFIG_PROBE}}|${EMAIL_CONFIG_PROBE}|" \
-        -e "s|{{SLACK_CONFIG_CRITICAL}}|${SLACK_CONFIG_CRITICAL}|" \
-        -e "s|{{SLACK_CONFIG_WARNING}}|${SLACK_CONFIG_WARNING}|" \
-        -e "s|{{SMTP_GLOBAL}}|${SMTP_GLOBAL}|" \
-        -e "s|{{SLACK_GLOBAL}}|${SLACK_GLOBAL}|" \
-        "$1" > "$2"
+    awk '
+    function esc(s) { gsub(/\\/, "\\\\", s); gsub(/&/, "\\\\&", s); return s }
+    function email_block(subj,    to) {
+        to = esc(ENVIRON["ALERT_EMAIL_TO"])
+        return "email_configs:\n      - to: \x27" to "\x27\n        send_resolved: true\n        headers:\n          Subject: \x27" subj " {{ .GroupLabels.alertname }}\x27"
+    }
+    function slack_block(ch,    c) {
+        c = esc(ch)
+        return "slack_configs:\n      - channel: \x27" c "\x27\n        send_resolved: true\n        title: \x27{{ .Status | toUpper }}: {{ .GroupLabels.alertname }}\x27\n        text: \x27{{ range .Alerts }}{{ .Annotations.description }}{{ end }}\x27"
+    }
+    function smtp_global(    h, f, u, p, t) {
+        h = esc(ENVIRON["SMTP_SMARTHOST"]); f = esc(ENVIRON["SMTP_FROM"])
+        u = esc(ENVIRON["SMTP_AUTH_USERNAME"]); p = esc(ENVIRON["SMTP_AUTH_PASSWORD"])
+        t = esc(ENVIRON["SMTP_REQUIRE_TLS"])
+        return "  smtp_smarthost: \x27" h "\x27\n  smtp_from: \x27" f "\x27\n  smtp_auth_username: \x27" u "\x27\n  smtp_auth_password: \x27" p "\x27\n  smtp_require_tls: " t
+    }
+    function slack_global(    u) {
+        u = esc(ENVIRON["SLACK_API_URL"])
+        return "  slack_api_url: \x27" u "\x27"
+    }
+    BEGIN {
+        # Initialise every marker to empty so unused ones are removed (not
+        # left literally in the output, which amtool would reject).
+        M["{{EMAIL_CONFIG_DEFAULT}}"]  = ""
+        M["{{EMAIL_CONFIG_CRITICAL}}"] = ""
+        M["{{EMAIL_CONFIG_WARNING}}"]  = ""
+        M["{{EMAIL_CONFIG_PROBE}}"]    = ""
+        M["{{SLACK_CONFIG_CRITICAL}}"] = ""
+        M["{{SLACK_CONFIG_WARNING}}"]  = ""
+        M["{{SMTP_GLOBAL}}"]           = ""
+        M["{{SLACK_GLOBAL}}"]          = ""
+        has_email = (ENVIRON["SMTP_SMARTHOST"] != "" && ENVIRON["ALERT_EMAIL_TO"] != "")
+        has_slack = (ENVIRON["SLACK_API_URL"] != "")
+        if (has_email) {
+            M["{{EMAIL_CONFIG_DEFAULT}}"]  = email_block("[ALERT]")
+            M["{{EMAIL_CONFIG_CRITICAL}}"] = email_block("[CRITICAL]")
+            M["{{EMAIL_CONFIG_WARNING}}"]  = email_block("[WARNING]")
+            M["{{EMAIL_CONFIG_PROBE}}"]    = email_block("[PROBE]")
+            M["{{SMTP_GLOBAL}}"]           = smtp_global()
+        }
+        if (has_slack) {
+            M["{{SLACK_CONFIG_CRITICAL}}"] = slack_block(ENVIRON["SLACK_CHANNEL_CRITICAL"])
+            M["{{SLACK_CONFIG_WARNING}}"]  = slack_block(ENVIRON["SLACK_CHANNEL_WARNING"])
+            M["{{SLACK_GLOBAL}}"]          = slack_global()
+        }
+    }
+    # Replace each marker with its block using fixed-string substitution
+    # (index + substr), not regex gsub: the markers contain {{ }} which are
+    # regex interval chars and would need escaping, and the replacement values
+    # may contain & or \ which gsub interprets specially. Fixed-string splice
+    # avoids both pitfalls and is portable across awk implementations.
+    function replace_str(s, find, repl,    out, p) {
+        out = ""
+        while ((p = index(s, find)) > 0) {
+            out = out substr(s, 1, p - 1) repl
+            s = substr(s, p + length(find))
+        }
+        return out s
+    }
+    {
+        line = $0
+        for (marker in M) {
+            if (index(line, marker)) line = replace_str(line, marker, M[marker])
+        }
+        print line
+    }
+    ' "$1" > "$2"
 }
 
 # --- Main -----------------------------------------------------------------
