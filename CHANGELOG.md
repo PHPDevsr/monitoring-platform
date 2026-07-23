@@ -1,32 +1,17 @@
 # Changelog
 
-## [Unreleased] - 2026-07-23
+All notable changes to this project are documented here. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
+to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Fixed
-- Alertmanager config template no longer emits empty `global` SMTP/Slack
-  fields when credentials are absent. The `global` block now uses
-  `{{SMTP_GLOBAL}}` / `{{SLACK_GLOBAL}}` markers expanded only when
-  `SMTP_SMARTHOST`+`ALERT_EMAIL_TO` / `SLACK_API_URL` are set, so the
-  no-credentials render stays valid for `amtool check-config`.
-- `entrypoint.sh` `${VAR}` substitution rewritten in `awk` (was a
-  busybox-ash-fragile shell string-chopping loop that hung the CI render
-  step for 10+ minutes).
-- `entrypoint.sh` marker expansion rewritten in `awk` with fixed-string
-  splicing (sed `s|||` cannot handle the multi-line email/slack/global
-  blocks — embedded newlines terminate the sed command with "unmatched
-  '|'"). All markers are pre-initialised to empty so unused ones are
-  removed rather than left literally in the output.
-- CI render step now `chmod 777` the bind-mounted config dir so the
-  container can write the rendered `alertmanager.yml` (was
-  "Permission denied", hidden behind the earlier hang).
-- CI render `docker run` calls wrapped with `timeout 90` so any future
-  hang fails fast. Rendered config is printed in CI logs for
-  traceability.
+Release notes for each version are generated automatically by
+[release-please](https://github.com/googleapis/release-please) from
+[Conventional Commits](https://www.conventionalcommits.org/) since the previous
+tag (`feat:` → Added, `fix:` → Fixed, `chore:`/`refactor:` → Changed, etc.).
+Do not hand-edit the per-version sections; commit conventional messages and let
+the release pull request update this file.
 
-### Changed
-- `alertmanager.yml.tmpl`: static `global` SMTP/Slack lines replaced
-  with conditional markers; header comments updated to describe the
-  marker behaviour.
+## [Unreleased]
 
 ## [1.1.0] - 2026-07-22
 

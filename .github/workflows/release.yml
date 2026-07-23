@@ -1,0 +1,60 @@
+# =============================================================================
+# Release Pipeline - Monitoring Platform
+# =============================================================================
+# Automated release cycle using release-please. On each conventional-commit
+# push to master, release-please opens (or updates) a "chore(main): release
+# X.Y.Z" pull request containing the regenerated CHANGELOG.md and the version
+# bump. Merging that PR cuts the version tag and publishes a GitHub Release
+# whose body is the changelog section for that version.
+#
+# Conventional commit mapping: feat: -> Added / minor bump, fix: -> Fixed /
+# patch bump, feat!:/BREAKING -> major bump, chore/refactor/docs -> Changed
+# (no bump unless scoped).
+#
+# One-time repo setup required (Settings -> Actions -> General):
+#   "Allow GitHub Actions to create and approve pull requests" = enabled.
+# =============================================================================
+
+name: Release
+
+on:
+  push:
+    branches: [master]
+  # Allows kicking off a release-please pass manually, e.g. to bootstrap.
+  workflow_dispatch:
+
+permissions:
+  contents: write        # create release, tag, and commit CHANGELOG.md
+  pull-requests: write   # open / maintain the release pull request
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create / update release PR
+        uses: googleapis/release-please-action@v4
+        with:
+          # Single-version repo (not a monorepo).
+          release-type: simple
+          # Tags are v1.2.0 (not monitoring-platform-v1.2.0).
+          include-component-in-tag: false
+          # Path to the changelog file release-please maintains.
+          changelog-path: CHANGELOG.md
+          changelog-type: markdown
+          # Marker for the upcoming/unreleased section.
+          changelog-sections: |
+            [
+              { "type": "feat", "section": "Added", "hidden": false },
+              { "type": "fix", "section": "Fixed", "hidden": false },
+              { "type": "perf", "section": "Changed", "hidden": false },
+              { "type": "refactor", "section": "Changed", "hidden": false },
+              { "type": "chore", "section": "Changed", "hidden": false },
+              { "type": "docs", "section": "Changed", "hidden": false },
+              { "type": "build", "section": "Changed", "hidden": false },
+              { "type": "ci", "section": "Changed", "hidden": false }
+            ]
+          # Use the default GITHUB_TOKEN (has contents + pull-requests write
+          # via the permissions block above).
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target-branch: master
