@@ -15,19 +15,24 @@ CONFIG_TEMPLATE="/etc/alertmanager/alertmanager.yml.tmpl"
 CONFIG_FILE="/etc/alertmanager/alertmanager.yml"
 
 # --- Step 1: ${VAR} substitution -------------------------------------------
-# Replaces ${VAR_NAME} with the value of the matching environment variable.
+# Replaces ${VAR_NAME} placeholders with the value of the matching environment
+# variable. Implemented with sed (one -e per known variable) instead of a
+# nested shell string-chopping loop, because busybox ash brace-expansion in
+# ${line#*\$\{} is fragile and can fail to advance, hanging the container.
+# Only the variables listed below are substituted; values are escaped so
+# ampersands/backslashes in credentials do not corrupt the sed replacement.
 substitute_vars() {
-    while IFS= read -r line || [ -n "$line" ]; do
-        while [ "$line" != "${line#*\$\{}" ]; do
-            prefix="${line%%\$\{}*"
-            rest="${line#*\$\{}"
-            var="${rest%%\}*}"
-            suffix="${rest#*$var\}}"
-            eval "val=\"\${$var:-}\""
-            line="${prefix}${val}${suffix}"
-        done
-        printf '%s\n' "$line"
-    done < "$1" > "$2"
+    sed_expr=""
+    for var in SMTP_SMARTHOST SMTP_FROM SMTP_AUTH_USERNAME SMTP_AUTH_PASSWORD \
+               SMTP_REQUIRE_TLS SLACK_API_URL SLACK_CHANNEL_CRITICAL \
+               SLACK_CHANNEL_WARNING ALERT_EMAIL_TO; do
+        eval "val=\"\${$var:-}\""
+        # Escape sed replacement metacharacters: backslash, ampersand, pipe.
+        esc_val=$(printf '%s' "$val" | sed -e 's/[\\&|]/\\&/g')
+        sed_expr="$sed_expr -e s|\\${$var}|$esc_val|g"
+    done
+    # shellcheck disable=SC2086
+    sed $sed_expr "$1" > "$2"
 }
 
 # --- Step 2: receiver marker expansion -------------------------------------

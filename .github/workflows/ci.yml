@@ -123,8 +123,10 @@ jobs:
           rm -f /tmp/am/etc/alertmanager/alertmanager.yml
           cp alertmanager/alertmanager.yml.tmpl /tmp/am/etc/alertmanager/alertmanager.yml.tmpl
 
-          # Render in a temporary container (AM_RENDER_ONLY=1 exits after render)
-          docker run --rm \
+          # Render in a temporary container (AM_RENDER_ONLY=1 exits after render).
+          # --timeout caps container runtime so a render hang fails fast instead
+          # of blocking the job for 10+ minutes.
+          timeout 90 docker run --rm \
             -e AM_RENDER_ONLY=1 \
             -v /tmp/am/etc/alertmanager:/etc/alertmanager \
             monitoring-alertmanager:test
@@ -147,7 +149,7 @@ jobs:
         # plus email/slack receiver configs).
         run: |
           rm -f /tmp/am/etc/alertmanager/alertmanager.yml
-          docker run --rm \
+          timeout 90 docker run --rm \
             -e AM_RENDER_ONLY=1 \
             -e SMTP_SMARTHOST=smtp.example.com:587 \
             -e SMTP_FROM=alerts@example.com \
