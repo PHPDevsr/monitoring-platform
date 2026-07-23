@@ -82,16 +82,13 @@ jobs:
       - name: Build release notes for this tag
         id: notes
         run: |
-          # Regenerate the changelog again with --unreleased so the version
-          # section for the current tag is at the top, then extract from the
-          # first "## [" header up to (but not including) the next one.
-          git-cliff --config cliff.toml --tag ${{ steps.tag.outputs.name }} \
-            --output /tmp/full.md
-          # Extract this version's section (first ## [...] block).
+          # Extract this version's section from the already-generated CHANGELOG.md.
+          # The first "## [x.y.z]" block is the newest release (or Unreleased).
+          # Skip the header, grab from the first ## [...] line to just before the next.
           awk '
-            /^## \[/ { if (count==0) { print; count++; next } else { exit } }
-            count==1 { print }
-          ' /tmp/full.md > /tmp/release_body.md
+            /^## \[/ { if (found) exit; found=1 }
+            found { print }
+          ' CHANGELOG.md > /tmp/release_body.md
           echo "--- release body ---"
           cat /tmp/release_body.md
           echo "path=/tmp/release_body.md" >> "$GITHUB_OUTPUT"
