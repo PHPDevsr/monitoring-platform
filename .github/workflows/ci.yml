@@ -122,6 +122,9 @@ jobs:
           mkdir -p /tmp/am/etc/alertmanager
           rm -f /tmp/am/etc/alertmanager/alertmanager.yml
           cp alertmanager/alertmanager.yml.tmpl /tmp/am/etc/alertmanager/alertmanager.yml.tmpl
+          # The container may run as a non-root user; make the bind-mounted
+          # dir writable so the entrypoint can write alertmanager.yml into it.
+          chmod 777 /tmp/am/etc/alertmanager
 
           # Render in a temporary container (AM_RENDER_ONLY=1 exits after render).
           # --timeout caps container runtime so a render hang fails fast instead
@@ -149,6 +152,7 @@ jobs:
         # plus email/slack receiver configs).
         run: |
           rm -f /tmp/am/etc/alertmanager/alertmanager.yml
+          chmod 777 /tmp/am/etc/alertmanager
           timeout 90 docker run --rm \
             -e AM_RENDER_ONLY=1 \
             -e SMTP_SMARTHOST=smtp.example.com:587 \
