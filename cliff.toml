@@ -21,11 +21,12 @@ Release notes for each version are generated automatically by
 (`v*`) is pushed. Do not hand-edit per-version sections below.
 """
 body = """\
-{% for release in releases %}\
-{% if release.version %}\
-## [{{ release.version | trim_start_matches(prefix="v") }}] - {{ release.date | date(format="%Y-%m-%d") }}
-
-{% for group, commits in release.commits | group_by(attribute="group") %}\
+{% if version %}\
+## [{{ version | trim_start_matches(prefix="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## [Unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}\
 ### {{ group | upper_first }}
 
 {% for commit in commits %}\
@@ -33,10 +34,6 @@ body = """\
 {{ commit.message | upper_first }} ({{ commit.id | truncate(length=7, end="") }})
 {% endfor %}\
 {% endfor %}\
-{% endif %}\
-{% endfor %}\
-
-## [Unreleased]
 """
 trim = true
 footer = ""
