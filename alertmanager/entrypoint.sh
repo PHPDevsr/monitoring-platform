@@ -16,23 +16,20 @@ CONFIG_FILE="/etc/alertmanager/alertmanager.yml"
 
 # --- Step 1: ${VAR} substitution -------------------------------------------
 # Replaces ${VAR_NAME} placeholders with the value of the matching environment
-# variable. Implemented with sed (one -e per known variable) instead of a
-# nested shell string-chopping loop, because busybox ash brace-expansion in
-# ${line#*\$\{} is fragile and can fail to advance, hanging the container.
-# Only the variables listed below are substituted; values are escaped so
-# ampersands/backslashes in credentials do not corrupt the sed replacement.
+# variable. Implemented with awk instead of a shell string-chopping loop or
+# eval, because busybox ash (the image's /bin/sh) rejects the brace matching in
+# ${line#*\$\{} (hangs) and the eval indirection ("bad substitution"). awk is
+# present in the Alpine-based alertmanager image; ENVIRON[] reads env values
+# directly with no shell brace expansion.
 substitute_vars() {
-    sed_expr=""
-    for var in SMTP_SMARTHOST SMTP_FROM SMTP_AUTH_USERNAME SMTP_AUTH_PASSWORD \
-               SMTP_REQUIRE_TLS SLACK_API_URL SLACK_CHANNEL_CRITICAL \
-               SLACK_CHANNEL_WARNING ALERT_EMAIL_TO; do
-        eval "val=\"\${$var:-}\""
-        # Escape sed replacement metacharacters: backslash, ampersand, pipe.
-        esc_val=$(printf '%s' "$val" | sed -e 's/[\\&|]/\\&/g')
-        sed_expr="$sed_expr -e s|\\${$var}|$esc_val|g"
-    done
-    # shellcheck disable=SC2086
-    sed $sed_expr "$1" > "$2"
+    awk '{
+        line = $0
+        while (match(line, /\$\{[A-Za-z_][A-Za-z0-9_]*\}/)) {
+            name = substr(line, RSTART + 2, RLENGTH - 3)
+            line = substr(line, 1, RSTART - 1) ENVIRON[name] substr(line, RSTART + RLENGTH)
+        }
+        print line
+    }' "$1" > "$2"
 }
 
 # --- Step 2: receiver marker expansion -------------------------------------
