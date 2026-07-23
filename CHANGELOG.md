@@ -8,12 +8,13 @@ Release notes for each version are generated automatically by
 [git-cliff](https://git-cliff.org) from
 [Conventional Commits](https://www.conventionalcommits.org/) when a version tag
 (`v*`) is pushed. Do not hand-edit per-version sections below.
-## [Unreleased]
+## [1.0.0] - 2026-07-23
 ### Added
 
 - Add production-grade monitoring platform (f588197)
 ### Changed
 
+- **changelog:** Update for v1.0.0 (4e0e12b)
 - **changelog:** Update for v1.0.0 (45c4d7c)
 - **changelog:** Update for v1.0.0 (70d79fe)
 - Bump pinned actions to latest versions (SHA-pinned) (948196c)
@@ -26,6 +27,7 @@ Release notes for each version are generated automatically by
 - Update image versions in documentation (8dbc7c1)
 ### Fixed
 
+- **ci:** Extract release notes from CHANGELOG.md instead of re-running git-cliff (216779e)
 - **ci:** Use pat= arg for trim_start_matches in cliff.toml (dbe26b9)
 - **ci:** Use git-cliff v2 per-release body context in cliff.toml (70e490c)
 - **ci:** Use git-cliff v2 'releases' template context in cliff.toml (55c00dd)
