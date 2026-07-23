@@ -1,0 +1,62 @@
+# =============================================================================
+# git-cliff configuration - Monitoring Platform
+# =============================================================================
+# Generates CHANGELOG.md sections from Conventional Commits in Keep a Changelog
+# format. Used by .github/workflows/release.yml on every version tag (v*) push:
+#   git-cliff --output CHANGELOG.md  (regenerates the full file from history)
+# Then the workflow commits CHANGELOG.md back to master and creates the release.
+# =============================================================================
+
+[changelog]
+header = """\
+# Changelog
+
+All notable changes to this project are documented here. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
+adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+Release notes for each version are generated automatically by
+[git-cliff](https://git-cliff.org) from
+[Conventional Commits](https://www.conventionalcommits.org/) when a version tag
+(`v*`) is pushed. Do not hand-edit per-version sections below.
+"""
+body = """\
+{% for version, change in relative | reverse %}\
+## [{{ version | trim_start_matches(prefix="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+
+{% for group, commits in change | group_by(attribute="group") %}\
+### {{ group | upper_first }}
+
+{% for commit in commits %}\
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
+{{ commit.message | upper_first }} ({{ commit.id | truncate(length=7, end="") }})
+{% endfor %}\
+{% endfor %}\
+{% endfor %}\
+
+## [Unreleased]
+"""
+trim = true
+footer = ""
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+
+# Split commits into changelog groups by conventional type.
+commit_parsers = [
+  { message = "^feat", group = "Added" },
+  { message = "^fix", group = "Fixed" },
+  { message = "^perf", group = "Changed" },
+  { message = "^refactor", group = "Changed" },
+  { message = "^docs", group = "Changed" },
+  { message = "^style", group = "Changed" },
+  { message = "^test", group = "Changed" },
+  { message = "^build", group = "Changed" },
+  { message = "^ci", group = "Changed" },
+  { message = "^chore", group = "Changed" },
+]
+# Protect release/changelog automation commits from appearing in their own notes.
+filter_commits = true
+tag_pattern = "v[0-9].*"
+sort_commits = "newest"

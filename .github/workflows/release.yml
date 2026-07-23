@@ -1,60 +1,108 @@
 # =============================================================================
 # Release Pipeline - Monitoring Platform
 # =============================================================================
-# Automated release cycle using release-please. On each conventional-commit
-# push to master, release-please opens (or updates) a "chore(main): release
-# X.Y.Z" pull request containing the regenerated CHANGELOG.md and the version
-# bump. Merging that PR cuts the version tag and publishes a GitHub Release
-# whose body is the changelog section for that version.
+# Tag-triggered release cycle (no pull-request permission required).
 #
-# Conventional commit mapping: feat: -> Added / minor bump, fix: -> Fixed /
-# patch bump, feat!:/BREAKING -> major bump, chore/refactor/docs -> Changed
-# (no bump unless scoped).
+# When you push a version tag (v*, e.g. v1.0.0) this workflow:
+#   1. Regenerates CHANGELOG.md from the full Conventional-Commit history using
+#      git-cliff (cliff.toml, Keep a Changelog format) and commits it to master.
+#   2. Extracts the section for the pushed tag and creates a GitHub Release
+#      with those notes.
 #
-# One-time repo setup required (Settings -> Actions -> General):
-#   "Allow GitHub Actions to create and approve pull requests" = enabled.
+# This avoids the "Allow GitHub Actions to create and approve pull requests"
+# repo setting, which is not available here. It only needs contents: write.
+#
+# Usage:  git tag -a v1.0.0 -m "chore: release v1.0.0" && git push origin v1.0.0
 # =============================================================================
 
 name: Release
 
 on:
   push:
-    branches: [master]
-  # Allows kicking off a release-please pass manually, e.g. to bootstrap.
+    tags:
+      - "v*"
+  # Manual trigger; supply a tag name to run the release for that tag.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.0.0)"
+        required: true
 
 permissions:
-  contents: write        # create release, tag, and commit CHANGELOG.md
-  pull-requests: write   # open / maintain the release pull request
+  contents: write   # commit CHANGELOG.md back to master + create the release
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release-please:
-    name: Release Please
+  release:
+    name: Generate changelog and release
     runs-on: ubuntu-latest
     steps:
-      - name: Create / update release PR
-        uses: googleapis/release-please-action@v4
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "name=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout (full history)
+        uses: actions/checkout@v7
         with:
-          # Single-version repo (not a monorepo).
-          release-type: simple
-          # Tags are v1.2.0 (not monitoring-platform-v1.2.0).
-          include-component-in-tag: false
-          # Path to the changelog file release-please maintains.
-          changelog-path: CHANGELOG.md
-          changelog-type: markdown
-          # Marker for the upcoming/unreleased section.
-          changelog-sections: |
-            [
-              { "type": "feat", "section": "Added", "hidden": false },
-              { "type": "fix", "section": "Fixed", "hidden": false },
-              { "type": "perf", "section": "Changed", "hidden": false },
-              { "type": "refactor", "section": "Changed", "hidden": false },
-              { "type": "chore", "section": "Changed", "hidden": false },
-              { "type": "docs", "section": "Changed", "hidden": false },
-              { "type": "build", "section": "Changed", "hidden": false },
-              { "type": "ci", "section": "Changed", "hidden": false }
-            ]
-          # Use the default GITHUB_TOKEN (has contents + pull-requests write
-          # via the permissions block above).
-          token: ${{ secrets.GITHUB_TOKEN }}
-          target-branch: master
+          fetch-depth: 0
+          ref: master
+
+      - name: Install git-cliff
+        uses: orhun/git-cliff-action@v4
+        id: cliff
+        with:
+          config: cliff.toml
+          args: --output CHANGELOG.md
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
+      - name: Show generated changelog
+        run: cat CHANGELOG.md
+
+      - name: Commit CHANGELOG.md to master
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "No changelog changes to commit."
+          else
+            git commit -m "docs(changelog): update for ${{ steps.tag.outputs.name }}"
+            git push origin master
+          fi
+
+      - name: Build release notes for this tag
+        id: notes
+        run: |
+          # Regenerate the changelog again with --unreleased so the version
+          # section for the current tag is at the top, then extract from the
+          # first "## [" header up to (but not including) the next one.
+          git-cliff --config cliff.toml --tag ${{ steps.tag.outputs.name }} \
+            --output /tmp/full.md
+          # Extract this version's section (first ## [...] block).
+          awk '
+            /^## \[/ { if (count==0) { print; count++; next } else { exit } }
+            count==1 { print }
+          ' /tmp/full.md > /tmp/release_body.md
+          echo "--- release body ---"
+          cat /tmp/release_body.md
+          echo "path=/tmp/release_body.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: ${{ steps.tag.outputs.name }}
+          body_path: ${{ steps.notes.outputs.path }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
