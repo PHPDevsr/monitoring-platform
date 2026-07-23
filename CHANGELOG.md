@@ -9,6 +9,10 @@ Release notes for each version are generated automatically by
 [Conventional Commits](https://www.conventionalcommits.org/) when a version tag
 (`v*`) is pushed. Do not hand-edit per-version sections below.
 ## [Unreleased]
+### Changed
+
+- **changelog:** Update for v1.0.0 (70d79fe)
+## [1.0.0] - 2026-07-23
 ### Added
 
 - Add production-grade monitoring platform (f588197)
