@@ -114,9 +114,13 @@ jobs:
       - name: Validate rendered alertmanager config (no creds)
         # Render the template the same way the container does, then validate
         # the resulting config with amtool check-config (official alertmanager
-        # config validator), not just YAML syntax.
+        # config validator), not just YAML syntax. This scenario uses NO
+        # SMTP/Slack credentials, so the global block and email/slack receiver
+        # configs must be omitted entirely (rendering only webhook receivers)
+        # to keep the config valid for amtool.
         run: |
           mkdir -p /tmp/am/etc/alertmanager
+          rm -f /tmp/am/etc/alertmanager/alertmanager.yml
           cp alertmanager/alertmanager.yml.tmpl /tmp/am/etc/alertmanager/alertmanager.yml.tmpl
 
           # Render in a temporary container (AM_RENDER_ONLY=1 exits after render)
@@ -124,6 +128,11 @@ jobs:
             -e AM_RENDER_ONLY=1 \
             -v /tmp/am/etc/alertmanager:/etc/alertmanager \
             monitoring-alertmanager:test
+
+          # Show exactly what is being validated for traceability
+          echo "=== Rendered alertmanager.yml (no creds) ==="
+          cat /tmp/am/etc/alertmanager/alertmanager.yml
+          echo "=== End rendered config ==="
 
           # Validate with amtool check-config inside the image
           docker run --rm \
@@ -134,7 +143,8 @@ jobs:
 
       - name: Validate rendered alertmanager config (with creds)
         # Render with SMTP/Slack env vars set to ensure those branches also
-        # produce a valid alertmanager config.
+        # produce a valid alertmanager config (global SMTP/Slack block present
+        # plus email/slack receiver configs).
         run: |
           rm -f /tmp/am/etc/alertmanager/alertmanager.yml
           docker run --rm \
@@ -150,6 +160,11 @@ jobs:
             -e SLACK_CHANNEL_WARNING=#alerts-warning \
             -v /tmp/am/etc/alertmanager:/etc/alertmanager \
             monitoring-alertmanager:test
+
+          # Show exactly what is being validated for traceability
+          echo "=== Rendered alertmanager.yml (with creds) ==="
+          cat /tmp/am/etc/alertmanager/alertmanager.yml
+          echo "=== End rendered config ==="
 
           docker run --rm \
             -v /tmp/am/etc/alertmanager:/etc/alertmanager:ro \

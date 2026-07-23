@@ -55,11 +55,19 @@ expand_markers() {
         send_resolved: true
         headers:
           Subject: '[PROBE] {{ .GroupLabels.alertname }}'"
+        # Global SMTP block emitted only with email creds so the rendered
+        # config never contains empty smtp_* fields that amtool would reject.
+        SMTP_GLOBAL="  smtp_smarthost: '${SMTP_SMARTHOST}'
+  smtp_from: '${SMTP_FROM}'
+  smtp_auth_username: '${SMTP_AUTH_USERNAME}'
+  smtp_auth_password: '${SMTP_AUTH_PASSWORD}'
+  smtp_require_tls: ${SMTP_REQUIRE_TLS}"
     else
         EMAIL_CONFIG_DEFAULT=""
         EMAIL_CONFIG_CRITICAL=""
         EMAIL_CONFIG_WARNING=""
         EMAIL_CONFIG_PROBE=""
+        SMTP_GLOBAL=""
     fi
 
     # Slack config blocks (only when webhook URL is set)
@@ -74,9 +82,12 @@ expand_markers() {
         send_resolved: true
         title: '{{ .Status | toUpper }}: {{ .GroupLabels.alertname }}'
         text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'"
+        # Global Slack API URL emitted only with a webhook URL set.
+        SLACK_GLOBAL="  slack_api_url: '${SLACK_API_URL}'"
     else
         SLACK_CONFIG_CRITICAL=""
         SLACK_CONFIG_WARNING=""
+        SLACK_GLOBAL=""
     fi
 
     # Replace markers using sed
@@ -87,6 +98,8 @@ expand_markers() {
         -e "s|{{EMAIL_CONFIG_PROBE}}|${EMAIL_CONFIG_PROBE}|" \
         -e "s|{{SLACK_CONFIG_CRITICAL}}|${SLACK_CONFIG_CRITICAL}|" \
         -e "s|{{SLACK_CONFIG_WARNING}}|${SLACK_CONFIG_WARNING}|" \
+        -e "s|{{SMTP_GLOBAL}}|${SMTP_GLOBAL}|" \
+        -e "s|{{SLACK_GLOBAL}}|${SLACK_GLOBAL}|" \
         "$1" > "$2"
 }
 

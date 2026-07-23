@@ -10,15 +10,15 @@
 global:
   resolve_timeout: 5m
 
-  # SMTP settings for email notifications (configured via .env)
-  smtp_smarthost: '${SMTP_SMARTHOST}'
-  smtp_from: '${SMTP_FROM}'
-  smtp_auth_username: '${SMTP_AUTH_USERNAME}'
-  smtp_auth_password: '${SMTP_AUTH_PASSWORD}'
-  smtp_require_tls: ${SMTP_REQUIRE_TLS}
+  # SMTP settings for email notifications (configured via .env).
+  # The marker below is expanded by the entrypoint only when both
+  # SMTP_SMARTHOST and ALERT_EMAIL_TO are set, so this block stays empty (and
+  # the rendered config stays valid) when email notifications are not configured.
+{{SMTP_GLOBAL}}
 
-  # Slack API URL for Slack notifications (configured via .env)
-  slack_api_url: '${SLACK_API_URL}'
+  # Slack API URL for Slack notifications (configured via .env).
+  # The marker below is expanded only when SLACK_API_URL is set; omitted otherwise.
+{{SLACK_GLOBAL}}
 
 # The root route - all alerts enter here
 route:
