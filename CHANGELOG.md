@@ -8,6 +8,12 @@ Release notes for each version are generated automatically by
 [git-cliff](https://git-cliff.org) from
 [Conventional Commits](https://www.conventionalcommits.org/) when a version tag
 (`v*`) is pushed. Do not hand-edit per-version sections below.
+
+## [Unreleased]
+### Fixed
+
+- Use the official Alertmanager image directly with a mounted configuration renderer, fixing deployment pulls without a custom build; align CI and dependency updates.
+
 ## [1.0.1] - 2026-11-06
 ### Changed
 

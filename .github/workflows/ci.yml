@@ -12,10 +12,6 @@ on:
   pull_request:
     branches: [master]
 
-env:
-  DOCKER_BUILDKIT: 1
-  COMPOSE_DOCKER_CLI_BUILD: 1
-
 jobs:
   # ===========================================================================
   # Validate YAML Syntax
@@ -33,7 +29,7 @@ jobs:
       - name: Lint YAML files
         # NOTE: alertmanager.yml.tmpl is a template with ${VAR} and {{MARKER}}
         # placeholders, not static YAML. It is validated after rendering in
-        # the build-images job.
+        # the alertmanager-validate job.
         run: |
           yamllint -d relaxed \
             docker-compose.yml \
@@ -89,27 +85,22 @@ jobs:
         run: promtool check rules prometheus/alert.rules.yml
 
   # ===========================================================================
-  # Build Custom Images
+  # Validate Official Alertmanager Image
   # ===========================================================================
-  build-images:
-    name: Build Docker Images
+  alertmanager-validate:
+    name: Alertmanager Config Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Build Alertmanager image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: ./alertmanager
-          push: false
-          load: true
-          tags: monitoring-alertmanager:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Pull official Alertmanager image
+        # Read the version from Compose so validation follows dependency updates.
+        run: |
+          cp .env.example .env
+          AM_IMAGE=$(docker compose config --format json | jq -r '.services.alertmanager.image')
+          echo "AM_IMAGE=$AM_IMAGE" >> "$GITHUB_ENV"
+          docker pull "$AM_IMAGE"
 
       - name: Validate rendered alertmanager config (no creds)
         # Render the template the same way the container does, then validate
@@ -132,7 +123,9 @@ jobs:
           timeout 90 docker run --rm \
             -e AM_RENDER_ONLY=1 \
             -v /tmp/am/etc/alertmanager:/etc/alertmanager \
-            monitoring-alertmanager:test
+            -v "$PWD/alertmanager/entrypoint.sh:/entrypoint.sh:ro" \
+            --entrypoint /bin/sh \
+            "$AM_IMAGE" /entrypoint.sh
 
           # Show exactly what is being validated for traceability
           echo "=== Rendered alertmanager.yml (no creds) ==="
@@ -143,7 +136,7 @@ jobs:
           docker run --rm \
             -v /tmp/am/etc/alertmanager:/etc/alertmanager:ro \
             --entrypoint /bin/amtool \
-            monitoring-alertmanager:test \
+            "$AM_IMAGE" \
             check-config /etc/alertmanager/alertmanager.yml
 
       - name: Validate rendered alertmanager config (with creds)
@@ -165,7 +158,9 @@ jobs:
             -e SLACK_CHANNEL_CRITICAL=#alerts-critical \
             -e SLACK_CHANNEL_WARNING=#alerts-warning \
             -v /tmp/am/etc/alertmanager:/etc/alertmanager \
-            monitoring-alertmanager:test
+            -v "$PWD/alertmanager/entrypoint.sh:/entrypoint.sh:ro" \
+            --entrypoint /bin/sh \
+            "$AM_IMAGE" /entrypoint.sh
 
           # Show exactly what is being validated for traceability
           echo "=== Rendered alertmanager.yml (with creds) ==="
@@ -175,7 +170,7 @@ jobs:
           docker run --rm \
             -v /tmp/am/etc/alertmanager:/etc/alertmanager:ro \
             --entrypoint /bin/amtool \
-            monitoring-alertmanager:test \
+            "$AM_IMAGE" \
             check-config /etc/alertmanager/alertmanager.yml
 
   # ===========================================================================
@@ -184,7 +179,7 @@ jobs:
   integration-test:
     name: Integration Test
     runs-on: ubuntu-latest
-    needs: [yaml-lint, compose-validate, prometheus-validate, build-images]
+    needs: [yaml-lint, compose-validate, prometheus-validate, alertmanager-validate]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -196,9 +191,9 @@ jobs:
           sed -i 's/changeme/testpassword/g' .env
           sed -i 's/your-app-password/testsmtp/g' .env
 
-      - name: Build and start stack
+      - name: Pull and start stack
         run: |
-          docker compose build
+          docker compose pull
           docker compose up -d
 
       - name: Wait for services to be healthy

@@ -245,7 +245,7 @@ docker compose up -d
 ### Update Images
 
 ```bash
-# Pull new images
+# Pull official images
 docker compose pull
 
 # Recreate containers
