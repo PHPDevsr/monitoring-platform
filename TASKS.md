@@ -1,4 +1,5 @@
 # Tasks
+- [x] Handle Loki probe DNS failures using its current shared-network IP with a DNS warning; preserve HTTP readiness, retries, timeout, and container diagnostics
 - [x] Fix deployment readiness for Loki without an in-image HTTP client and Promtail without wget; report failing healthcheck details
 - [ ] Provision VM
 - [ ] Install Docker

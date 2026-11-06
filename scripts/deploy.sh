@@ -150,6 +150,7 @@ wait_for_health() {
     for service in "${services[@]}"; do
         log_info "Checking $service..."
         local start_time=$(date +%s)
+        local readiness_diagnostics_shown=false
 
         while true; do
             local current_time=$(date +%s)
@@ -175,9 +176,38 @@ wait_for_health() {
             # Loki has no in-image HTTP client. Probe its readiness over the
             # internal network using the already-running Prometheus image.
             if [ "$service" = "loki" ] && [ "$state" = "running" ]; then
-                if docker compose exec -T prometheus wget -q -T 5 -O /dev/null http://loki:3100/ready; then
+                local readiness_output
+                if readiness_output=$(docker compose exec -T prometheus wget -q -T 5 -O /dev/null http://loki:3100/ready 2>&1); then
                     log_success "loki is ready"
                     break
+                fi
+
+                # A resolver failure in the probe container must not hide an
+                # otherwise ready Loki. Read current IPs on the shared network;
+                # never cache an address or bypass HTTP readiness validation.
+                if [[ "$readiness_output" == *"bad address"* ]]; then
+                    local loki_ip prometheus_ip fallback_output
+                    loki_ip=$(docker inspect --format='{{with index .NetworkSettings.Networks "monitoring-network"}}{{.IPAddress}}{{end}}' loki 2>/dev/null || true)
+                    prometheus_ip=$(docker inspect --format='{{with index .NetworkSettings.Networks "monitoring-network"}}{{.IPAddress}}{{end}}' prometheus 2>/dev/null || true)
+                    if [[ -n "$loki_ip" && -n "$prometheus_ip" ]]; then
+                        if fallback_output=$(docker compose exec -T prometheus wget -q -T 5 -O /dev/null "http://${loki_ip}:3100/ready" 2>&1); then
+                            log_warning "Loki DNS lookup failed from Prometheus; /ready succeeded via current IP $loki_ip. Check Docker DNS; other clients may be affected."
+                            log_success "loki is ready"
+                            break
+                        fi
+                        readiness_output+=$'\n'"IP readiness probe failed: $fallback_output"
+                    fi
+                fi
+
+                if [ "$readiness_diagnostics_shown" = false ]; then
+                    # A DNS error may accompany restarts or missing network
+                    # attachments. Show evidence once while retaining retries.
+                    log_warning "Loki readiness probe failed; collecting container and network diagnostics"
+                    printf '%s\n' "$readiness_output" >&2
+                    docker inspect --format='{{.Name}} state={{.State.Status}} restarts={{.RestartCount}} networks={{json .NetworkSettings.Networks}}' prometheus loki >&2 || true
+                    docker compose logs loki --tail=20 >&2 || true
+                    log_info "Retrying Loki readiness until the service timeout"
+                    readiness_diagnostics_shown=true
                 fi
             elif [ "$health" = "none" ] && [ "$state" = "running" ]; then
                 log_error "$service has no healthcheck configured"
