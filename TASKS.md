@@ -1,4 +1,5 @@
 # Tasks
+- [x] Fix deployment readiness for Loki without an in-image HTTP client and Promtail without wget; report failing healthcheck details
 - [ ] Provision VM
 - [ ] Install Docker
 - [x] Deploy monitoring stack

@@ -270,6 +270,39 @@ Docker log rotation is configured in docker-compose.yml:
 
 ## Support
 
+### Deployment times out at Loki or Promtail is unhealthy
+
+Loki has its in-container healthcheck disabled because its image does not
+include an HTTP client. `deploy.sh` checks `http://loki:3100/ready` from the
+Prometheus container on the internal network instead. A running Loki container
+alone does not establish readiness.
+
+Promtail's official image does not install wget/curl. Its healthcheck uses Bash
+TCP support to send a GET request to `/ready` and requires HTTP 200.
+
+After updating `scripts/deploy.sh` and `docker-compose.yml`, rerun:
+
+```bash
+./scripts/deploy.sh
+
+# Inspect readiness without publishing additional ports.
+docker compose exec -T prometheus wget -q -T 5 -O - http://loki:3100/ready
+docker compose exec -T prometheus wget -q -T 5 -O - http://promtail:9080/ready
+docker inspect --format='{{json .State.Health}}' promtail
+```
+
+Readiness checks have a default timeout of 300 seconds per service. For a slow
+server, use `DEPLOY_TIMEOUT=600 ./scripts/deploy.sh` after checking the service
+logs. Deployment failures include container health details and recent logs.
+
+Run the local regression checks with `bash scripts/test-deploy.sh`. These checks
+simulate Docker; verify the actual endpoints on the deployment server as well.
+
+To roll back this change, restore the previous `scripts/deploy.sh` and
+`docker-compose.yml` from your deployment backup, then run
+`docker compose up -d promtail` to restore its previous healthcheck. Existing
+Loki and Grafana data stay in their named volumes.
+
 For issues:
 1. Check container logs: `docker compose logs <service>`
 2. Run validation: `./scripts/validate.sh`

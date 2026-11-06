@@ -17,8 +17,8 @@ NC='\033[0m' # No Color
 
 # Configuration
 COMPOSE_FILE="docker-compose.yml"
-DEPLOY_TIMEOUT=300
-HEALTH_CHECK_INTERVAL=10
+DEPLOY_TIMEOUT=${DEPLOY_TIMEOUT:-300}
+HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-10}
 
 # Logging functions
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
@@ -72,7 +72,8 @@ validate_configs() {
     local configs=(
         "prometheus/prometheus.yml"
         "prometheus/alert.rules.yml"
-        "alertmanager/alertmanager.yml"
+        "alertmanager/alertmanager.yml.tmpl"
+        "alertmanager/entrypoint.sh"
         "loki/loki-config.yml"
         "promtail/promtail-config.yml"
         "blackbox-exporter/blackbox.yml"
@@ -90,6 +91,8 @@ validate_configs() {
     # Validate YAML syntax
     if command -v yamllint &> /dev/null; then
         for config in "${configs[@]}"; do
+            # Templates are validated after rendering in CI; scripts are not YAML.
+            [[ "$config" == *.yml ]] || continue
             if ! yamllint -d relaxed "$config" &> /dev/null; then
                 log_warning "YAML validation warning in: $config"
             fi
@@ -144,10 +147,9 @@ wait_for_health() {
     log_info "Waiting for services to become healthy..."
 
     local services=("prometheus" "grafana" "alertmanager" "loki" "node-exporter" "cadvisor" "blackbox-exporter" "promtail")
-    local start_time=$(date +%s)
-
     for service in "${services[@]}"; do
         log_info "Checking $service..."
+        local start_time=$(date +%s)
 
         while true; do
             local current_time=$(date +%s)
@@ -155,17 +157,39 @@ wait_for_health() {
 
             if [ $elapsed -ge $DEPLOY_TIMEOUT ]; then
                 log_error "Timeout waiting for $service to become healthy"
+                docker inspect --format='{{json .State}}' "$service" >&2 || true
                 docker compose logs "$service" --tail=50
                 exit 1
             fi
 
-            local health=$(docker inspect --format='{{.State.Health.Status}}' "$service" 2>/dev/null || echo "unknown")
+            local state health
+            state=$(docker inspect --format='{{.State.Status}}' "$service" 2>/dev/null || echo "missing")
+            if [ "$state" = "exited" ] || [ "$state" = "dead" ] || [ "$state" = "missing" ]; then
+                log_error "$service is $state"
+                docker compose logs "$service" --tail=50
+                exit 1
+            fi
 
-            if [ "$health" = "healthy" ]; then
+            health=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$service" 2>/dev/null || echo "unknown")
+
+            # Loki has no in-image HTTP client. Probe its readiness over the
+            # internal network using the already-running Prometheus image.
+            if [ "$service" = "loki" ] && [ "$state" = "running" ]; then
+                if docker compose exec -T prometheus wget -q -T 5 -O /dev/null http://loki:3100/ready; then
+                    log_success "loki is ready"
+                    break
+                fi
+            elif [ "$health" = "none" ] && [ "$state" = "running" ]; then
+                log_error "$service has no healthcheck configured"
+                exit 1
+            fi
+
+            if [ "$health" = "healthy" ] && [ "$state" = "running" ] && [ "$service" != "loki" ]; then
                 log_success "$service is healthy"
                 break
             elif [ "$health" = "unhealthy" ]; then
                 log_error "$service is unhealthy"
+                docker inspect --format='{{json .State.Health}}' "$service" >&2 || true
                 docker compose logs "$service" --tail=50
                 exit 1
             fi
@@ -188,7 +212,7 @@ verify_endpoints() {
     )
 
     for endpoint in "${endpoints[@]}"; do
-        local url="${endpoint%%:*}"
+        local url="${endpoint%:*}"
         local name="${endpoint##*:}"
 
         if curl -sf "$url" > /dev/null 2>&1; then
