@@ -166,7 +166,7 @@ services:
   # Loki - Log Aggregation
   # ===========================================================================
   loki:
-    image: grafana/loki:3.7.4
+    image: grafana/loki:3.7.9
     container_name: loki
     restart: unless-stopped
     user: "10001:10001"
