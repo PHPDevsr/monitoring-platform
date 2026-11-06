@@ -128,10 +128,9 @@ services:
   # Alertmanager - Alert Routing and Notification
   # ===========================================================================
   alertmanager:
-    build:
-      context: ./alertmanager
-      dockerfile: Dockerfile
-    image: monitoring-alertmanager:v0.34.2
+    image: prom/alertmanager:v0.34.2
+    # Render .env-backed configuration using the mounted script; no custom build.
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     container_name: alertmanager
     restart: unless-stopped
     env_file:
@@ -142,6 +141,7 @@ services:
       - '--web.external-url=http://localhost:9093'
       - '--cluster.listen-address='
     volumes:
+      - ./alertmanager/entrypoint.sh:/entrypoint.sh:ro
       - ./alertmanager/alertmanager.yml.tmpl:/etc/alertmanager/alertmanager.yml.tmpl:ro
       - alertmanager_data:/alertmanager
     networks:

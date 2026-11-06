@@ -8,7 +8,7 @@ Production-grade centralized monitoring platform using Docker Compose.
 |-----------|---------|---------|
 | Prometheus | v2.53.0 | Metrics collection and storage |
 | Grafana | v11.1.0 | Visualization and dashboards |
-| Alertmanager | v0.33.1 | Alert routing and notification |
+| Alertmanager | v0.34.2 | Alert routing and notification |
 | Loki | v3.7.4 | Log aggregation |
 | Promtail | v3.6.11 | Log collector |
 | Node Exporter | v1.12.1 | Host system metrics |
@@ -48,7 +48,6 @@ monitoring-platform/
 │   ├── prometheus.yml          # Prometheus configuration
 │   └── alert.rules.yml         # Alert rules
 ├── alertmanager/
-│   ├── Dockerfile              # Custom image with envsubst
 │   ├── entrypoint.sh           # Config template processor
 │   └── alertmanager.yml.tmpl   # Alertmanager config template
 ├── grafana/
@@ -73,6 +72,11 @@ monitoring-platform/
 ## Environment Variables
 
 All credentials and configurable settings are centralized in `.env` file.
+
+Alertmanager uses the official `prom/alertmanager` image directly. Compose mounts
+the entrypoint script and configuration template read-only; the script renders
+email and Slack settings from `.env` before starting Alertmanager. No image build
+is required.
 
 ### Grafana
 

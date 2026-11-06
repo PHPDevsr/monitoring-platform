@@ -115,7 +115,7 @@ prepare_environment() {
     log_success "Environment prepared"
 }
 
-# Pull latest images
+# Pull pinned official images
 pull_images() {
     log_info "Pulling Docker images..."
 
