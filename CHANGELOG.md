@@ -8,12 +8,16 @@ Release notes for each version are generated automatically by
 [git-cliff](https://git-cliff.org) from
 [Conventional Commits](https://www.conventionalcommits.org/) when a version tag
 (`v*`) is pushed. Do not hand-edit per-version sections below.
+## [1.0.2] - 2026-11-06
+### Changed
 
-## [Unreleased]
+- **deps:** Bump cadvisor/cadvisor from v0.49.1 to v0.55.1 (9d37c12)
+- **deps:** Bump prom/blackbox-exporter from v0.28.0 to v0.29.1 (b9a9f99)
+- **deps:** Bump grafana/loki from 3.7.4 to 3.7.9 (7fe32bf)
+- **changelog:** Update for v1.0.1 (c967390)
 ### Fixed
 
-- Use the official Alertmanager image directly with a mounted configuration renderer, fixing deployment pulls without a custom build; align CI and dependency updates.
-
+- **alertmanager:** Use official image without custom build (5d830ed)
 ## [1.0.1] - 2026-11-06
 ### Changed
 
