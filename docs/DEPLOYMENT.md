@@ -295,10 +295,29 @@ Readiness checks have a default timeout of 300 seconds per service. For a slow
 server, use `DEPLOY_TIMEOUT=600 ./scripts/deploy.sh` after checking the service
 logs. Deployment failures include container health details and recent logs.
 
+If the probe reports `wget: bad address 'loki:3100'`, deployment reads both
+containers' current addresses on `monitoring-network` and retries Loki's
+`/ready` endpoint using its current IP. Success emits a DNS warning; failed
+HTTP readiness still blocks deployment. This fallback does not repair Docker
+DNS for Grafana, Promtail, or other clients.
+
+Check the live address and resolver configuration on the server:
+
+```bash
+LOKI_IP=$(docker inspect --format='{{with index .NetworkSettings.Networks "monitoring-network"}}{{.IPAddress}}{{end}}' loki)
+docker compose exec -T prometheus wget -S -T 5 -O - "http://${LOKI_IP}:3100/ready"
+docker compose exec -T prometheus cat /etc/resolv.conf
+```
+
+The IP probe should return HTTP 200 and `ready`. Docker service names should
+resolve between containers on the same network; see the
+[Docker Compose networking guide](https://docs.docker.com/compose/how-tos/networking/).
+
 Run the local regression checks with `bash scripts/test-deploy.sh`. These checks
 simulate Docker; verify the actual endpoints on the deployment server as well.
 
-To roll back this change, restore the previous `scripts/deploy.sh` and
+To roll back the DNS fallback alone, restore `scripts/deploy.sh` from the
+deployment backup. To roll back the original readiness change, restore the previous `scripts/deploy.sh` and
 `docker-compose.yml` from your deployment backup, then run
 `docker compose up -d promtail` to restore its previous healthcheck. Existing
 Loki and Grafana data stay in their named volumes.

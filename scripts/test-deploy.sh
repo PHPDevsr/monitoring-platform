@@ -9,7 +9,7 @@ trap 'rm -rf "$test_dir"' EXIT
 
 docker() {
     local args="$*" service="${!#}"
-    if [[ "$args" == *'{{.State.Status}}'* ]]; then
+    if [[ "${2:-}" == '--format={{.State.Status}}' ]]; then
         if [[ "$SCENARIO" == exited && "$service" == loki ]]; then
             echo exited
         else
@@ -27,12 +27,25 @@ docker() {
         fi
     elif [[ "$args" == 'compose exec -T prometheus wget -q -T 5 -O /dev/null http://loki:3100/ready' ]]; then
         echo probe >> "$test_dir/probes"
+        if [[ "$SCENARIO" == dns* ]]; then
+            echo "wget: bad address 'loki:3100'" >&2
+            return 1
+        fi
         [[ "$SCENARIO" != timeout ]] || return 1
         if [[ "$SCENARIO" == retry && ! -f "$test_dir/retried" ]]; then
             touch "$test_dir/retried"
             return 1
         fi
         return 0
+    elif [[ "$args" == *'{{with index .NetworkSettings.Networks'* ]]; then
+        if [[ "$SCENARIO" != dns-no-network ]]; then
+            if [[ "$service" == loki ]]; then echo 172.18.0.6; else echo 172.18.0.4; fi
+        fi
+    elif [[ "$args" == 'compose exec -T prometheus wget -q -T 5 -O /dev/null http://172.18.0.6:3100/ready' ]]; then
+        echo fallback >> "$test_dir/fallbacks"
+        [[ "$SCENARIO" == dns-ready ]] || return 1
+    elif [[ "$args" == *'.NetworkSettings.Networks'* ]]; then
+        echo 'network diagnostic output'
     elif [[ "$args" == 'compose logs '* || "$1" == inspect ]]; then
         echo 'container diagnostics'
     else
@@ -54,6 +67,7 @@ check_scenario() {
     SCENARIO=$1
     echo 0 > "$test_dir/time"
     : > "$test_dir/probes"
+    : > "$test_dir/fallbacks"
     local output code=0
     output=$( (DEPLOY_TIMEOUT=5; wait_for_health) 2>&1) || code=$?
     if [[ "$code" != "$2" || "$output" != *"$3"* ]]; then
@@ -64,12 +78,26 @@ check_scenario() {
         echo 'FAIL: Loki readiness was not retried'
         exit 1
     fi
+    if [[ "$SCENARIO" == dns || "$SCENARIO" == dns-no-network ]]; then
+        [[ "$output" == *'network diagnostic output'* ]]
+        [[ "$output" == *'Timeout waiting for loki'* ]]
+        [[ $(printf '%s\n' "$output" | grep -c 'bad address') == 1 ]]
+    fi
+    if [[ "$SCENARIO" == dns-ready ]]; then
+        [[ $(wc -l < "$test_dir/fallbacks") == 1 ]]
+        [[ "$output" == *'Check Docker DNS'* ]]
+    elif [[ "$SCENARIO" == dns-no-network || "$SCENARIO" == timeout ]]; then
+        [[ ! -s "$test_dir/fallbacks" ]]
+    fi
     printf 'PASS %s\n' "$SCENARIO"
 }
 
 check_scenario ready 0 'All services are healthy'
 check_scenario retry 0 'All services are healthy'
 check_scenario timeout 1 'Timeout waiting for loki'
+check_scenario dns 1 "wget: bad address 'loki:3100'"
+check_scenario dns-ready 0 'loki is ready'
+check_scenario dns-no-network 1 'Timeout waiting for loki'
 check_scenario exited 1 'loki is exited'
 check_scenario unhealthy 1 'healthcheck diagnostic output'
 check_scenario no-health 1 'prometheus has no healthcheck configured'
