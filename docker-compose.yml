@@ -293,7 +293,7 @@ services:
   # Blackbox Exporter - Endpoint Probing
   # ===========================================================================
   blackbox-exporter:
-    image: prom/blackbox-exporter:v0.28.0
+    image: prom/blackbox-exporter:v0.29.1
     container_name: blackbox-exporter
     restart: unless-stopped
     command:
