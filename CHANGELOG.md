@@ -8,6 +8,16 @@ Release notes for each version are generated automatically by
 [git-cliff](https://git-cliff.org) from
 [Conventional Commits](https://www.conventionalcommits.org/) when a version tag
 (`v*`) is pushed. Do not hand-edit per-version sections below.
+## [1.0.1] - 2026-11-06
+### Changed
+
+- **deps:** Bump prom/alertmanager in /alertmanager (85d0033)
+- **ci:** Bump orhun/git-cliff-action from 4.8.0 to 4.9.1 (de72fbe)
+- **ci:** Bump softprops/action-gh-release from 3.0.2 to 3.0.3 (9ef1eec)
+- **deps:** Bump prom/alertmanager in /alertmanager (d858a42)
+- **ci:** Bump docker/setup-buildx-action from 4.2.0 to 4.4.1 (7d2c305)
+- **ci:** Bump docker/build-push-action from 7.3.0 to 7.4.0 (0571407)
+- **changelog:** Update for v1.0.0 (26d5829)
 ## [1.0.0] - 2026-07-23
 ### Added
 
