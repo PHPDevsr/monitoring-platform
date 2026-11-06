@@ -8,6 +8,13 @@ Release notes for each version are generated automatically by
 [git-cliff](https://git-cliff.org) from
 [Conventional Commits](https://www.conventionalcommits.org/) when a version tag
 (`v*`) is pushed. Do not hand-edit per-version sections below.
+## [1.0.3] - 2026-11-06
+### Changed
+
+- **changelog:** Update for v1.0.2 (2f5a26b)
+### Fixed
+
+- **deploy:** Check Loki and Promtail readiness reliably (635c6c6)
 ## [1.0.2] - 2026-11-06
 ### Changed
 
