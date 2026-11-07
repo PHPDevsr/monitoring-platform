@@ -77,6 +77,7 @@ validate_configs() {
         "loki/loki-config.yml"
         "promtail/promtail-config.yml"
         "blackbox-exporter/blackbox.yml"
+        "blackbox-exporter/entrypoint.sh"
         "grafana/provisioning/datasources/datasources.yml"
         "grafana/provisioning/dashboards/dashboards.yml"
     )

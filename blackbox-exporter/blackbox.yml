@@ -2,6 +2,8 @@
 # Blackbox Exporter Configuration
 # =============================================================================
 # Probe modules for HTTP, TCP, ICMP, and DNS checks
+# Entrypoint overrides explicit insecure_skip_verify values from
+# BLACKBOX_INSECURE_SKIP_VERIFY (default: false).
 # =============================================================================
 
 modules:

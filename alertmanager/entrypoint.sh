@@ -11,6 +11,19 @@
 
 set -e
 
+# TLS verification defaults to enabled; reject malformed YAML boolean values.
+SMTP_TLS_INSECURE_SKIP_VERIFY=${SMTP_TLS_INSECURE_SKIP_VERIFY:-false}
+ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY=${ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY:-false}
+case "$SMTP_TLS_INSECURE_SKIP_VERIFY" in
+    true|false) ;;
+    *) echo "SMTP_TLS_INSECURE_SKIP_VERIFY must be true or false" >&2; exit 1 ;;
+esac
+case "$ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY" in
+    true|false) ;;
+    *) echo "ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY must be true or false" >&2; exit 1 ;;
+esac
+export SMTP_TLS_INSECURE_SKIP_VERIFY ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY
+
 CONFIG_TEMPLATE="/etc/alertmanager/alertmanager.yml.tmpl"
 CONFIG_FILE="/etc/alertmanager/alertmanager.yml"
 
@@ -60,7 +73,7 @@ expand_markers() {
         h = esc(ENVIRON["SMTP_SMARTHOST"]); f = esc(ENVIRON["SMTP_FROM"])
         u = esc(ENVIRON["SMTP_AUTH_USERNAME"]); p = esc(ENVIRON["SMTP_AUTH_PASSWORD"])
         t = esc(ENVIRON["SMTP_REQUIRE_TLS"])
-        return "  smtp_smarthost: \x27" h "\x27\n  smtp_from: \x27" f "\x27\n  smtp_auth_username: \x27" u "\x27\n  smtp_auth_password: \x27" p "\x27\n  smtp_require_tls: " t
+        return "  smtp_smarthost: \x27" h "\x27\n  smtp_from: \x27" f "\x27\n  smtp_auth_username: \x27" u "\x27\n  smtp_auth_password: \x27" p "\x27\n  smtp_require_tls: " t "\n  smtp_tls_config:\n    insecure_skip_verify: " ENVIRON["SMTP_TLS_INSECURE_SKIP_VERIFY"]
     }
     function slack_global(    u) {
         u = esc(ENVIRON["SLACK_API_URL"])

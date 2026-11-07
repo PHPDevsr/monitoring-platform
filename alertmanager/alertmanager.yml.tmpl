@@ -10,6 +10,11 @@
 global:
   resolve_timeout: 5m
 
+  # Default TLS verification for outgoing HTTPS notifications (Slack/webhooks).
+  http_config:
+    tls_config:
+      insecure_skip_verify: ${ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY}
+
   # SMTP settings for email notifications (configured via .env).
   # The marker below is expanded by the entrypoint only when both
   # SMTP_SMARTHOST and ALERT_EMAIL_TO are set, so this block stays empty (and

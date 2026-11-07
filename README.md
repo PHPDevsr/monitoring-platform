@@ -59,6 +59,7 @@ monitoring-platform/
 ├── promtail/
 │   └── promtail-config.yml     # Promtail configuration
 ├── blackbox-exporter/
+│   ├── entrypoint.sh           # ENV-backed TLS config renderer
 │   └── blackbox.yml            # Blackbox probe modules
 ├── scripts/
 │   ├── deploy.sh               # Deployment script
@@ -93,6 +94,28 @@ is required.
 | `PROMETHEUS_RETENTION_TIME` | How long to keep metrics | 30d |
 | `PROMETHEUS_RETENTION_SIZE` | Max storage size | 10GB |
 
+### Blackbox Exporter
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `BLACKBOX_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for `http_2xx`, `https_2xx`, and `tcp_tls` | false |
+
+Set `BLACKBOX_INSECURE_SKIP_VERIFY=false` in `.env` to verify certificates, or
+`true` to skip verification. Only lowercase `true` and `false` are accepted;
+unset or empty values default to `false`. Other probe modules keep their existing
+settings. The entrypoint renders `/tmp/blackbox.yml` from the read-only source.
+
+Apply changes to `.env` by recreating the service:
+
+```bash
+docker compose up -d --force-recreate blackbox-exporter
+```
+
+To roll back the setting, use `BLACKBOX_INSECURE_SKIP_VERIFY=false` and run the
+same command. To roll back the implementation, restore `docker-compose.yml`,
+`.env.example`, `blackbox-exporter/blackbox.yml`, and `scripts/deploy.sh` from
+the deployment backup, then recreate the service.
+
 ### Alertmanager - Email (SMTP)
 
 | Variable | Description | Example |
@@ -102,7 +125,24 @@ is required.
 | `SMTP_AUTH_USERNAME` | SMTP username | alerts@example.com |
 | `SMTP_AUTH_PASSWORD` | SMTP password/app password | your-app-password |
 | `SMTP_REQUIRE_TLS` | Require TLS | true |
+| `SMTP_TLS_INSECURE_SKIP_VERIFY` | Skip SMTP certificate verification (default false) | false |
 | `ALERT_EMAIL_TO` | Alert recipient email | oncall@example.com |
+
+`SMTP_TLS_INSECURE_SKIP_VERIFY` controls `global.smtp_tls_config` when email is
+configured. `ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY` controls
+`global.http_config.tls_config` for outgoing HTTPS notifications, including Slack
+and webhooks. Both default to `false` (certificate verification enabled), accept
+only lowercase `true`/`false`, and treat unset or empty values as `false`.
+`SMTP_REQUIRE_TLS` separately controls whether SMTP requires TLS.
+
+After editing `.env`, apply the settings with:
+
+```bash
+docker compose up -d --force-recreate alertmanager
+```
+
+To restore certificate verification, set both values to `false` and recreate
+Alertmanager with the same command.
 
 ### Alertmanager - Slack
 

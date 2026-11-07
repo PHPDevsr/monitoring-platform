@@ -1,4 +1,6 @@
 # Tasks
+- [x] Configure Alertmanager SMTP and outgoing HTTPS TLS verification from ENV with false defaults and boolean validation
+- [x] Configure Blackbox Exporter TLS insecure_skip_verify from ENV with a false default and boolean validation
 - [x] Handle Loki probe DNS failures using its current shared-network IP with a DNS warning; preserve HTTP readiness, retries, timeout, and container diagnostics
 - [x] Fix deployment readiness for Loki without an in-image HTTP client and Promtail without wget; report failing healthcheck details
 - [ ] Provision VM
