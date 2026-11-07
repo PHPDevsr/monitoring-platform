@@ -326,3 +326,146 @@ For issues:
 1. Check container logs: `docker compose logs <service>`
 2. Run validation: `./scripts/validate.sh`
 3. Check reports in `reports/` directory
+
+
+## Telegram notifications
+
+Telegram is an optional native Alertmanager integration. It sends alerts to one
+chat alongside existing email/Slack/webhook routing, subject to silences and
+inhibition. No additional service or image build is required.
+
+### Create the bot and obtain a chat ID
+
+1. Open [BotFather](https://t.me/BotFather), send `/newbot`, and follow its prompts.
+   Save the token privately, following the [official bot setup guide](https://core.telegram.org/bots/tutorial#obtain-your-bot-token).
+2. For a private destination, open your bot and send `/start`. For a group, add
+   the bot, allow it to send messages, and send `/start@YourBotUsername` in that
+   group so the bot receives an update even with privacy mode enabled.
+3. In a trusted terminal, read the token without adding it to shell history,
+   then fetch recent updates. Run these commands without shell tracing (`set -x`):
+
+   ```bash
+   read -rsp 'Telegram bot token: ' TELEGRAM_BOT_TOKEN; echo
+   curl --fail --silent --show-error \
+     "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates"
+   unset TELEGRAM_BOT_TOKEN
+   ```
+
+4. Find the intended conversation in `result[].message.chat` and copy its numeric
+   `id` (not the user ID or update ID). A group/supergroup usually has a negative
+   ID, such as `-1001234567890`. Confirm the chat title or type before using it.
+   An empty result means you should send a new command to the bot and retry.
+   If another application already consumes updates or has a webhook registered,
+   coordinate with its owner or create a dedicated bot. Do not delete its webhook.
+   See the [Telegram getUpdates reference](https://core.telegram.org/bots/api#getupdates).
+
+### Configure and apply
+
+Fill these entries in the git-ignored `.env` file, replacing the sample values:
+
+```dotenv
+# Keep the bot token private; both settings are required to enable Telegram.
+TELEGRAM_BOT_TOKEN=replace-with-your-bot-token
+TELEGRAM_CHAT_ID=-1001234567890
+```
+
+Both empty disables Telegram. If only one is configured, or the chat ID is zero,
+non-numeric, or outside signed 64-bit range, startup fails before rendering.
+Negative IDs and decimal IDs with leading zeros are supported and normalized.
+The renderer never prints the generated configuration, which contains secrets.
+For Telegram-only delivery, also empty `SMTP_SMARTHOST`, `ALERT_EMAIL_TO`, and
+`SLACK_API_URL` so the example SMTP/Slack credentials do not enable those channels.
+
+```bash
+# Recreate: a restart alone does not reread the .env settings.
+docker compose up -d --force-recreate alertmanager
+docker compose exec alertmanager /bin/amtool check-config /etc/alertmanager/alertmanager.yml
+curl --fail http://localhost:9093/-/ready
+```
+
+Messages use plain text, with per-alert status, name, severity, instance, summary,
+and description. Telegram waits 30 seconds for a new group, batches subsequent
+updates every 5 minutes, and repeats firing alerts every 4 hours. Existing channel
+routing retains its previous timing. Existing configured channels can also
+receive the smoke-test alert below.
+
+### Test firing and resolved delivery
+
+Run on the Ubuntu Docker host after configuring the bot. These requests exercise
+Alertmanager delivery; they do not test Prometheus rule evaluation. Choose a
+fresh test label each time to avoid existing notification deduplication.
+
+```bash
+# Keep these variables in the same shell for both requests.
+TEST_ID="telegram-$(date -u +%s)"
+STARTS_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+ENDS_AT=$(date -u -d '+15 minutes' +%Y-%m-%dT%H:%M:%SZ)
+
+curl --fail --silent --show-error \
+  -H 'Content-Type: application/json' \
+  -X POST http://localhost:9093/api/v2/alerts --data-binary @- <<EOF
+[{
+  "labels": {"alertname": "TelegramSmokeTest", "severity": "test", "instance": "$TEST_ID"},
+  "annotations": {"summary": "Telegram integration test", "description": "Manual firing/resolved delivery check"},
+  "startsAt": "$STARTS_AT",
+  "endsAt": "$ENDS_AT"
+}]
+EOF
+```
+
+Wait until a `FIRING` message appears in Telegram (normally after 30 seconds).
+Then resolve the identical alert, keeping its labels and start time unchanged:
+
+```bash
+ENDS_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+curl --fail --silent --show-error \
+  -H 'Content-Type: application/json' \
+  -X POST http://localhost:9093/api/v2/alerts --data-binary @- <<EOF
+[{
+  "labels": {"alertname": "TelegramSmokeTest", "severity": "test", "instance": "$TEST_ID"},
+  "annotations": {"summary": "Telegram integration test", "description": "Manual firing/resolved delivery check"},
+  "startsAt": "$STARTS_AT",
+  "endsAt": "$ENDS_AT"
+}]
+EOF
+```
+
+Allow up to the next 5-minute group interval for `RESOLVED`. If the firing test
+was left unattended, it expires after 15 minutes. This procedure sends real test
+notifications only when you run it with your configured credentials.
+
+### Troubleshooting and rollback
+
+- Startup rejection: set both variables, use a nonzero numeric chat ID, then
+  recreate the service. Error messages intentionally omit supplied values.
+- No message: check Alertmanager readiness, active alerts, silences, inhibition,
+  and `docker compose logs --tail=100 alertmanager`. An accepted API request alone
+  does not prove delivery. Allow for the grouping intervals above.
+- Telegram `401`: verify or rotate the bot token. `400`/`403`: check the chat ID,
+  start the bot or add it to the chat, unblock it, and grant permission to send.
+- Network/TLS errors: verify outbound DNS and HTTPS access to `api.telegram.org`.
+  Certificate verification is enabled by default through
+  `ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY=false`.
+- Existing localhost:5001 webhook failures concern the pre-existing webhook
+  receivers; Telegram sends independently through its own receiver.
+- To disable Telegram, empty both variables and run
+  `docker compose up -d --force-recreate alertmanager` again. For a code rollback,
+  restore the affected files from the pre-change backup and recreate Alertmanager.
+
+### Automated configuration checks
+
+```bash
+# Local renderer, credential rejection, and routing checks (POSIX shell required).
+python3 -m pip install PyYAML
+python3 scripts/test-alertmanager.py
+
+# Full production-image check, including amtool syntax/template and routing validation.
+# Requires Docker Compose and an existing .env; uses dummy credentials only.
+AM_IMAGE=$(docker compose config --format json | python3 -c \
+  'import json,sys; print(json.load(sys.stdin)["services"]["alertmanager"]["image"])')
+python3 scripts/test-alertmanager.py --image "$AM_IMAGE"
+```
+
+CI runs the image-backed checks for disabled Telegram, Telegram alone, and
+Telegram with SMTP/Slack, including positive/negative IDs, invalid configuration,
+credential logging, and routing without duplicate Telegram notifications.

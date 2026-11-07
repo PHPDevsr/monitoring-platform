@@ -4,13 +4,13 @@
 # This file is processed at container startup to substitute ${VAR} placeholders
 # with values from the .env file. Receivers without valid credentials are
 # rendered as no-op webhook receivers so the config stays valid even when
-# SMTP/Slack are not configured.
+# SMTP/Slack are not configured. Telegram is omitted when unconfigured.
 # =============================================================================
 
 global:
   resolve_timeout: 5m
 
-  # Default TLS verification for outgoing HTTPS notifications (Slack/webhooks).
+  # Default TLS verification for outgoing HTTPS notifications (Telegram/Slack/webhooks).
   http_config:
     tls_config:
       insecure_skip_verify: ${ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY}
@@ -34,27 +34,31 @@ route:
   repeat_interval: 4h
 
   routes:
-    # Critical alerts - send immediately
-    - match:
-        severity: critical
-      receiver: 'critical-receiver'
-      group_wait: 10s
-      repeat_interval: 1h
-      continue: true
+{{TELEGRAM_ROUTE}}
+    # Keep the original default fallback and severity/probe routing together.
+    - receiver: 'default-receiver'
+      routes:
+        # Critical alerts - send immediately
+        - match:
+            severity: critical
+          receiver: 'critical-receiver'
+          group_wait: 10s
+          repeat_interval: 1h
+          continue: true
 
-    # Warning alerts
-    - match:
-        severity: warning
-      receiver: 'warning-receiver'
-      group_wait: 1m
-      repeat_interval: 4h
+        # Warning alerts
+        - match:
+            severity: warning
+          receiver: 'warning-receiver'
+          group_wait: 1m
+          repeat_interval: 4h
 
-    # Blackbox probe alerts
-    - match:
-        job: blackbox-http
-      receiver: 'probe-receiver'
-      group_by: ['instance']
-      group_wait: 30s
+        # Blackbox probe alerts
+        - match:
+            job: blackbox-http
+          receiver: 'probe-receiver'
+          group_by: ['instance']
+          group_wait: 30s
 
 # Inhibition rules - suppress certain alerts when others are firing
 inhibit_rules:
@@ -99,3 +103,6 @@ receivers:
     webhook_configs:
       - url: 'http://localhost:5001/webhook/probe'
         send_resolved: true
+
+# Included only when both Telegram credentials are configured.
+{{TELEGRAM_RECEIVER}}

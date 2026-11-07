@@ -76,7 +76,7 @@ All credentials and configurable settings are centralized in `.env` file.
 
 Alertmanager uses the official `prom/alertmanager` image directly. Compose mounts
 the entrypoint script and configuration template read-only; the script renders
-email and Slack settings from `.env` before starting Alertmanager. No image build
+email, Slack, and Telegram settings from `.env` before starting Alertmanager. No image build
 is required.
 
 ### Grafana
@@ -152,6 +152,28 @@ Alertmanager with the same command.
 | `SLACK_CHANNEL_CRITICAL` | Channel for critical alerts | #alerts-critical |
 | `SLACK_CHANNEL_WARNING` | Channel for warning alerts | #alerts-warning |
 
+### Alertmanager - Telegram
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TELEGRAM_BOT_TOKEN` | Bot token issued by BotFather | Empty (disabled) |
+| `TELEGRAM_CHAT_ID` | Nonzero numeric chat ID; negative for groups | Empty (disabled) |
+
+Set both variables in `.env` to send all eligible alerts to one Telegram chat,
+including firing and resolved notifications. Both empty disables Telegram;
+partial credentials or an invalid chat ID prevent startup. Chat IDs must fit a
+signed 64-bit integer. Existing silences and inhibition rules still apply.
+
+Telegram uses a 30-second group wait, 5-minute group interval, and 4-hour repeat
+interval. Messages include status, alert name, severity, instance, summary, and
+description as plain text. Notification credentials are not printed at startup.
+
+```bash
+docker compose up -d --force-recreate alertmanager
+```
+
+See [Telegram setup, smoke test, and rollback](docs/DEPLOYMENT.md#telegram-notifications).
+
 ## Operations
 
 ### Deploy
@@ -213,7 +235,9 @@ Edit `prometheus/alert.rules.yml` to add new alerting rules.
 
 ### Configure Notifications
 
-Edit `alertmanager/alertmanager.yml` to configure email, Slack, or webhook receivers.
+Configure email, Slack, and Telegram through `.env`. For custom routing or webhook
+receivers, edit `alertmanager/alertmanager.yml.tmpl`, which is rendered at startup;
+the standalone `alertmanager/alertmanager.yml` is not mounted by Compose.
 
 ### Add HTTP Probes
 

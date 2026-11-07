@@ -3,9 +3,8 @@
 # Alertmanager Entrypoint Script
 # =============================================================================
 # 1. Substitutes ${VAR} placeholders from environment variables
-# 2. Expands {{EMAIL_CONFIG_*}} / {{SLACK_CONFIG_*}} markers into email/slack
-#    configs only when the relevant credentials are present, otherwise removes
-#    them so the rendered YAML stays valid without SMTP/Slack.
+# 2. Expands email, Slack, and Telegram markers only when the relevant credentials
+#    are present; removes disabled integrations so rendered YAML stays valid.
 # 3. Starts Alertmanager
 # =============================================================================
 
@@ -23,6 +22,34 @@ case "$ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY" in
     *) echo "ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY must be true or false" >&2; exit 1 ;;
 esac
 export SMTP_TLS_INSECURE_SKIP_VERIFY ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY
+
+# Telegram is optional, but partial credentials must not silently disable it.
+TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+if [ -n "$TELEGRAM_BOT_TOKEN" ] || [ -n "$TELEGRAM_CHAT_ID" ]; then
+    if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+        echo "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must both be set" >&2
+        exit 1
+    fi
+    # Normalize decimal IDs without shell integer overflow or YAML octal parsing.
+    # Alertmanager requires a nonzero signed 64-bit integer (groups use negatives).
+    if ! TELEGRAM_CHAT_ID=$(printf '%s\n' "$TELEGRAM_CHAT_ID" | awk '
+        NR != 1 { exit 1 }
+        !/^-?[0-9]+$/ { exit 1 }
+        {
+            negative = sub(/^-/, "")
+            sub(/^0+/, "")
+            limit = negative ? "9223372036854775808" : "9223372036854775807"
+            if (length($0) == 0 || length($0) > 19 ||
+                (length($0) == 19 && "x" $0 > "x" limit)) exit 1
+            print (negative ? "-" : "") $0
+        }
+    '); then
+        echo "TELEGRAM_CHAT_ID must be a nonzero signed 64-bit integer" >&2
+        exit 1
+    fi
+fi
+export TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID
 
 CONFIG_TEMPLATE="/etc/alertmanager/alertmanager.yml.tmpl"
 CONFIG_FILE="/etc/alertmanager/alertmanager.yml"
@@ -46,10 +73,9 @@ substitute_vars() {
 }
 
 # --- Step 2: receiver marker expansion -------------------------------------
-# Replaces {{EMAIL_CONFIG_*}}, {{SLACK_CONFIG_*}}, {{SMTP_GLOBAL}} and
-# {{SLACK_GLOBAL}} markers with email/slack/global YAML blocks, but only when
+# Replaces email, Slack, Telegram, and global markers with YAML blocks only when
 # the relevant credentials are present; otherwise the markers are removed so
-# the rendered config stays valid without SMTP/Slack.
+# the rendered config stays valid without notification credentials.
 #
 # The blocks are multi-line, which sed cannot substitute (an embedded newline
 # terminates the s command). Instead a single awk program reads the scalar env
@@ -61,6 +87,12 @@ substitute_vars() {
 expand_markers() {
     awk '
     function esc(s) { gsub(/\\/, "\\\\", s); gsub(/&/, "\\\\&", s); return s }
+    function telegram_receiver(    token) {
+        token = ENVIRON["TELEGRAM_BOT_TOKEN"]
+        # YAML single-quoted scalars escape apostrophes by doubling them.
+        gsub(/\x27/, "\x27\x27", token)
+        return "  - name: \x27telegram-receiver\x27\n    telegram_configs:\n      - bot_token: \x27" token "\x27\n        chat_id: " ENVIRON["TELEGRAM_CHAT_ID"] "\n        send_resolved: true\n        parse_mode: \x27\x27\n        message: |-\n          {{ range .Alerts }}Status: {{ .Status | toUpper }}\n          Alert: {{ .Labels.alertname }}\n          Severity: {{ .Labels.severity }}\n          Instance: {{ .Labels.instance }}\n          Summary: {{ .Annotations.summary }}\n          Description: {{ .Annotations.description }}\n          {{ end }}"
+    }
     function email_block(subj,    to) {
         to = esc(ENVIRON["ALERT_EMAIL_TO"])
         return "email_configs:\n      - to: \x27" to "\x27\n        send_resolved: true\n        headers:\n          Subject: \x27" subj " {{ .GroupLabels.alertname }}\x27"
@@ -90,6 +122,12 @@ expand_markers() {
         M["{{SLACK_CONFIG_WARNING}}"]  = ""
         M["{{SMTP_GLOBAL}}"]           = ""
         M["{{SLACK_GLOBAL}}"]          = ""
+        M["{{TELEGRAM_ROUTE}}"]        = ""
+        M["{{TELEGRAM_RECEIVER}}"]     = ""
+        if (ENVIRON["TELEGRAM_BOT_TOKEN"] != "") {
+            M["{{TELEGRAM_ROUTE}}"] = "    # Send once to Telegram, then evaluate the existing notification tree.\n    - receiver: \x27telegram-receiver\x27\n      continue: true"
+            M["{{TELEGRAM_RECEIVER}}"] = telegram_receiver()
+        }
         has_email = (ENVIRON["SMTP_SMARTHOST"] != "" && ENVIRON["ALERT_EMAIL_TO"] != "")
         has_slack = (ENVIRON["SLACK_API_URL"] != "")
         if (has_email) {
@@ -145,10 +183,7 @@ else
     echo "[entrypoint] No template found, using existing config"
 fi
 
-# Debug: print generated config
-echo "[entrypoint] === Generated config ==="
-cat "$CONFIG_FILE"
-echo "[entrypoint] === End config ==="
+# Configuration contains notification credentials; never print it to logs.
 
 # Start Alertmanager (unless only rendering was requested)
 if [ "${AM_RENDER_ONLY:-0}" = "1" ]; then
