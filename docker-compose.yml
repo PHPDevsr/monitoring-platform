@@ -304,11 +304,16 @@ services:
   # ===========================================================================
   blackbox-exporter:
     image: prom/blackbox-exporter:v0.29.1
+    # Apply the ENV-backed TLS setting before starting the official binary.
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     container_name: blackbox-exporter
     restart: unless-stopped
+    environment:
+      BLACKBOX_INSECURE_SKIP_VERIFY: "${BLACKBOX_INSECURE_SKIP_VERIFY:-false}"
     command:
-      - '--config.file=/etc/blackbox/blackbox.yml'
+      - '--config.file=/tmp/blackbox.yml'
     volumes:
+      - ./blackbox-exporter/entrypoint.sh:/entrypoint.sh:ro
       - ./blackbox-exporter/blackbox.yml:/etc/blackbox/blackbox.yml:ro
     networks:
       - monitoring

@@ -59,6 +59,7 @@ monitoring-platform/
 ├── promtail/
 │   └── promtail-config.yml     # Promtail configuration
 ├── blackbox-exporter/
+│   ├── entrypoint.sh           # ENV-backed TLS config renderer
 │   └── blackbox.yml            # Blackbox probe modules
 ├── scripts/
 │   ├── deploy.sh               # Deployment script
@@ -92,6 +93,28 @@ is required.
 |----------|-------------|---------|
 | `PROMETHEUS_RETENTION_TIME` | How long to keep metrics | 30d |
 | `PROMETHEUS_RETENTION_SIZE` | Max storage size | 10GB |
+
+### Blackbox Exporter
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `BLACKBOX_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for `http_2xx`, `https_2xx`, and `tcp_tls` | false |
+
+Set `BLACKBOX_INSECURE_SKIP_VERIFY=false` in `.env` to verify certificates, or
+`true` to skip verification. Only lowercase `true` and `false` are accepted;
+unset or empty values default to `false`. Other probe modules keep their existing
+settings. The entrypoint renders `/tmp/blackbox.yml` from the read-only source.
+
+Apply changes to `.env` by recreating the service:
+
+```bash
+docker compose up -d --force-recreate blackbox-exporter
+```
+
+To roll back the setting, use `BLACKBOX_INSECURE_SKIP_VERIFY=false` and run the
+same command. To roll back the implementation, restore `docker-compose.yml`,
+`.env.example`, `blackbox-exporter/blackbox.yml`, and `scripts/deploy.sh` from
+the deployment backup, then recreate the service.
 
 ### Alertmanager - Email (SMTP)
 
