@@ -153,6 +153,8 @@ jobs:
             -e SMTP_AUTH_USERNAME=alerts@example.com \
             -e SMTP_AUTH_PASSWORD=secret \
             -e SMTP_REQUIRE_TLS=true \
+            -e SMTP_TLS_INSECURE_SKIP_VERIFY=true \
+            -e ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY=true \
             -e ALERT_EMAIL_TO=oncall@example.com \
             -e SLACK_API_URL=https://hooks.slack.com/services/x/y/z \
             -e SLACK_CHANNEL_CRITICAL=#alerts-critical \

@@ -8,6 +8,12 @@ Release notes for each version are generated automatically by
 [git-cliff](https://git-cliff.org) from
 [Conventional Commits](https://www.conventionalcommits.org/) when a version tag
 (`v*`) is pushed. Do not hand-edit per-version sections below.
+## [Unreleased]
+### Added
+
+- Configure Alertmanager SMTP and outgoing HTTPS certificate verification through separate ENV settings, both defaulting to verification enabled.
+- Configure Blackbox Exporter certificate verification through ENV.
+
 ## [1.0.4] - 2026-11-06
 ### Changed
 

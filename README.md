@@ -125,7 +125,24 @@ the deployment backup, then recreate the service.
 | `SMTP_AUTH_USERNAME` | SMTP username | alerts@example.com |
 | `SMTP_AUTH_PASSWORD` | SMTP password/app password | your-app-password |
 | `SMTP_REQUIRE_TLS` | Require TLS | true |
+| `SMTP_TLS_INSECURE_SKIP_VERIFY` | Skip SMTP certificate verification (default false) | false |
 | `ALERT_EMAIL_TO` | Alert recipient email | oncall@example.com |
+
+`SMTP_TLS_INSECURE_SKIP_VERIFY` controls `global.smtp_tls_config` when email is
+configured. `ALERTMANAGER_HTTP_INSECURE_SKIP_VERIFY` controls
+`global.http_config.tls_config` for outgoing HTTPS notifications, including Slack
+and webhooks. Both default to `false` (certificate verification enabled), accept
+only lowercase `true`/`false`, and treat unset or empty values as `false`.
+`SMTP_REQUIRE_TLS` separately controls whether SMTP requires TLS.
+
+After editing `.env`, apply the settings with:
+
+```bash
+docker compose up -d --force-recreate alertmanager
+```
+
+To restore certificate verification, set both values to `false` and recreate
+Alertmanager with the same command.
 
 ### Alertmanager - Slack
 
