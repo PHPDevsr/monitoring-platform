@@ -8,6 +8,17 @@ Release notes for each version are generated automatically by
 [git-cliff](https://git-cliff.org) from
 [Conventional Commits](https://www.conventionalcommits.org/) when a version tag
 (`v*`) is pushed. Do not hand-edit per-version sections below.
+## [1.1.0] - 2026-11-07
+### Added
+
+- **alertmanager:** Add configurable Telegram notifications (cb2a036)
+- **alertmanager:** Configure SMTP and HTTPS TLS verification from environment (c7e7a78)
+- **blackbox:** Configure TLS verification from environment (0139550)
+### Changed
+
+- Instructions AGENTS.md never touch CHANGELOG.md (5748436)
+- Remove touch CHANGELOG.md (b376c79)
+- **changelog:** Update for v1.0.4 (2983350)
 ## [1.0.4] - 2026-11-06
 ### Changed
 
