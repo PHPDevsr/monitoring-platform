@@ -34,7 +34,7 @@ services:
   # Prometheus - Metrics Collection and Storage
   # ===========================================================================
   prometheus:
-    image: prom/prometheus:v2.53.0
+    image: prom/prometheus:v3.16.0
     container_name: prometheus
     restart: unless-stopped
     user: "65534:65534"
