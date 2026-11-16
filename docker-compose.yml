@@ -128,7 +128,7 @@ services:
   # Alertmanager - Alert Routing and Notification
   # ===========================================================================
   alertmanager:
-    image: prom/alertmanager:v0.34.2
+    image: prom/alertmanager:v0.35.0
     # Render .env-backed configuration using the mounted script; no custom build.
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     container_name: alertmanager
