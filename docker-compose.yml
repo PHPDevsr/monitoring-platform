@@ -235,7 +235,7 @@ services:
   # Node Exporter - Host Metrics
   # ===========================================================================
   node-exporter:
-    image: prom/node-exporter:v1.12.1
+    image: prom/node-exporter:v1.13.1
     container_name: node-exporter
     restart: unless-stopped
     command:
